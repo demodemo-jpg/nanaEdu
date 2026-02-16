@@ -1,0 +1,8 @@
+{
+  "name": "なないろアプリ",
+  "description": "歯科衛生士の新人教育を支援する、現場のための教育・評価管理プラットフォーム。手順の確認からスキルアップまでをスマホ1台で完結させます。",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
