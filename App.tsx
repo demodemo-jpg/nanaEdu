@@ -38,7 +38,9 @@ import {
   ShieldAlert,
   Calendar,
   History,
-  Clock
+  Clock,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 
 // Firebase integration
@@ -471,7 +473,7 @@ const QAPage: React.FC<any> = ({ qaList, user, onSave, onDelete }) => {
 
       {editingQA && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] p-4 flex items-center justify-center">
-          <div className="bg-white w-full max-w-sm rounded-[40px] p-8 space-y-4 animate-in zoom-in-95">
+          <div className="bg-white w-full max-sm rounded-[40px] p-8 space-y-4 animate-in zoom-in-95">
             <div className="flex items-center gap-2 mb-2">
               <div className="p-2 bg-amber-50 text-amber-600 rounded-xl"><Lightbulb size={20} /></div>
               <h3 className="font-black text-lg text-slate-800">ナレッジを共有</h3>
@@ -505,7 +507,7 @@ const QAPage: React.FC<any> = ({ qaList, user, onSave, onDelete }) => {
   );
 };
 
-const SkillMapPage: React.FC<any> = ({ user, skills, allProgress, allUsers, onUpdate, onSaveSkill, onDeleteSkill }) => {
+const SkillMapPage: React.FC<any> = ({ user, skills, allProgress, allUsers, onUpdate, onSaveSkill, onDeleteSkill, onSaveMaster }) => {
   const { userId } = useParams();
   const targetId = userId || user.id;
   const targetUser = allUsers.find((u:any) => u.id === targetId) || user;
@@ -518,6 +520,20 @@ const SkillMapPage: React.FC<any> = ({ user, skills, allProgress, allUsers, onUp
 
   const handleEditMaster = (s: Skill) => {
     setEditingMasterSkill(s);
+  };
+
+  const moveSkill = (index: number, direction: 'up' | 'down') => {
+    const newSkills = [...skills];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= skills.length) return;
+    
+    // 入れ替え
+    const temp = newSkills[index];
+    newSkills[index] = newSkills[targetIndex];
+    newSkills[targetIndex] = temp;
+    
+    // クラウド保存
+    onSaveMaster('skills', newSkills);
   };
 
   return (
@@ -539,21 +555,30 @@ const SkillMapPage: React.FC<any> = ({ user, skills, allProgress, allUsers, onUp
       </div>
 
       <div className="space-y-4">
-        {skills.map((skill: Skill) => {
+        {skills.map((skill: Skill, index: number) => {
           const p = progressData.find((sp: any) => sp.skillId === skill.id);
           const level = p?.level || 0;
           return (
-            <div key={skill.id} className="bg-white p-5 rounded-[28px] border border-slate-100 shadow-sm">
+            <div key={skill.id} className="bg-white p-5 rounded-[28px] border border-slate-100 shadow-sm transition-all duration-300">
               <div className="flex justify-between items-center">
                 <div>
                   <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">{skill.category}</span>
                   <p className="font-black text-slate-800 text-sm">{skill.name}</p>
                 </div>
-                <div className="flex gap-1">
+                <div className="flex gap-1 items-center">
                   {isManagingMaster ? (
-                    <div className="flex gap-2">
+                    <div className="flex gap-1 items-center">
+                       {/* 並び替えボタン */}
+                       <div className="flex flex-col gap-1 mr-2 border-r border-slate-100 pr-2">
+                          {index > 0 && (
+                            <button onClick={() => moveSkill(index, 'up')} className="p-1 text-teal-500 bg-teal-50 rounded-md hover:bg-teal-100"><ArrowUp size={12} /></button>
+                          )}
+                          {index < skills.length - 1 && (
+                            <button onClick={() => moveSkill(index, 'down')} className="p-1 text-teal-500 bg-teal-50 rounded-md hover:bg-teal-100"><ArrowDown size={12} /></button>
+                          )}
+                       </div>
                        <button onClick={() => handleEditMaster(skill)} className="p-2 text-slate-300 hover:text-teal-600"><Edit2 size={14} /></button>
-                       <button onClick={() => { if(window.confirm('スキル項目を削除しますか？')) onDeleteSkill(skill.id); }} className="p-2 text-slate-300 hover:text-red-500"><Trash2 size={14} /></button>
+                       <button onClick={() => { if(window.confirm('スキル項目を削除しますか？')) onDeleteSkill(skill.id); }} className="p-2 text-slate-200 hover:text-red-500"><Trash2 size={14} /></button>
                     </div>
                   ) : (
                     user.role === UserRole.MENTOR && (
@@ -584,7 +609,7 @@ const SkillMapPage: React.FC<any> = ({ user, skills, allProgress, allUsers, onUp
       {isManagingMaster && (
         <button 
           onClick={() => setEditingMasterSkill({ id: `s_${Date.now()}`, name: '', category: '基本スキル' })} 
-          className="w-full py-4 border-2 border-dashed border-slate-200 rounded-3xl text-slate-400 font-black text-sm flex items-center justify-center gap-2"
+          className="w-full py-4 border-2 border-dashed border-slate-200 rounded-3xl text-slate-400 font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-all"
         >
           <Plus size={16} /> スキル項目を追加
         </button>
@@ -642,7 +667,7 @@ const ProfilePage: React.FC<{ user: User; allUsers: User[]; onDeleteUser: (id: s
        </div>
        <div className="flex justify-between items-center">
           <span className="text-[10px] font-black text-slate-400 uppercase">Version</span>
-          <span className="text-xs font-black text-teal-600">v1.7.0 Learning Log Cloud</span>
+          <span className="text-xs font-black text-teal-600">v1.8.0 Reordering Skills</span>
        </div>
     </div>
 
@@ -915,8 +940,8 @@ const AppContent: React.FC = () => {
           <Route path="/procedures/new" element={<ProcedureEditPage procedures={procedures} onSave={(p: Procedure) => handleSaveMaster('procedures', [...procedures, p])} />} />
           <Route path="/procedures/edit/:id" element={<ProcedureEditPage procedures={procedures} onSave={(p: Procedure) => handleSaveMaster('procedures', procedures.map(old => old.id === p.id ? p : old))} />} />
           <Route path="/procedures/:id" element={<ProcedureDetailPage procedures={procedures} user={user!} onDelete={(id: string) => handleSaveMaster('procedures', procedures.filter(p => p.id !== id))} />} />
-          <Route path="/skills" element={<SkillMapPage user={user!} skills={skills} allProgress={allSkillProgress} allUsers={allUsers} onUpdate={handleUpdateProgress} onSaveSkill={(s: Skill) => handleSaveMaster('skills', skills.some(os => os.id === s.id) ? skills.map(os => os.id === s.id ? s : os) : [...skills, s])} onDeleteSkill={(id: string) => handleSaveMaster('skills', skills.filter(s => s.id !== id))} />} />
-          <Route path="/skills/:userId" element={<SkillMapPage user={user!} skills={skills} allProgress={allSkillProgress} allUsers={allUsers} onUpdate={handleUpdateProgress} onSaveSkill={(s: Skill) => handleSaveMaster('skills', skills.some(os => os.id === s.id) ? skills.map(os => os.id === s.id ? s : os) : [...skills, s])} onDeleteSkill={(id: string) => handleSaveMaster('skills', skills.filter(s => s.id !== id))} />} />
+          <Route path="/skills" element={<SkillMapPage user={user!} skills={skills} allProgress={allSkillProgress} allUsers={allUsers} onUpdate={handleUpdateProgress} onSaveSkill={(s: Skill) => handleSaveMaster('skills', skills.some(os => os.id === s.id) ? skills.map(os => os.id === s.id ? s : os) : [...skills, s])} onDeleteSkill={(id: string) => handleSaveMaster('skills', skills.filter(s => s.id !== id))} onSaveMaster={handleSaveMaster} />} />
+          <Route path="/skills/:userId" element={<SkillMapPage user={user!} skills={skills} allProgress={allSkillProgress} allUsers={allUsers} onUpdate={handleUpdateProgress} onSaveSkill={(s: Skill) => handleSaveMaster('skills', skills.some(os => os.id === s.id) ? skills.map(os => os.id === s.id ? s : os) : [...skills, s])} onDeleteSkill={(id: string) => handleSaveMaster('skills', skills.filter(s => s.id !== id))} onSaveMaster={handleSaveMaster} />} />
           <Route path="/qa" element={<QAPage qaList={qaList} user={user!} onSave={(q: QA) => handleSaveMaster('qa', qaList.some(oq => oq.id === q.id) ? qaList.map(oq => oq.id === q.id ? q : oq) : [...qaList, q])} onDelete={(id: string) => handleSaveMaster('qa', qaList.filter(q => q.id !== id))} />} />
           <Route path="/profile" element={<ProfilePage user={user!} allUsers={allUsers} onDeleteUser={handleDeleteUser} onLogout={handleLogout} />} />
         </Routes>
