@@ -1,6 +1,6 @@
 
-import firebase from "firebase/app";
-import "firebase/firestore";
+import { initializeApp } from "firebase/app";
+import { getFirestore } from "firebase/firestore";
 
 // Firebaseの設定（Vercel等の環境変数から取得することを想定）
 // 開発時はFirebaseコンソールから取得した値をここに貼り付けます
@@ -13,6 +13,7 @@ const firebaseConfig = {
   appId: "YOUR_APP_ID"
 };
 
-// 初期化 - 互換性を考慮した記述
-const app = firebase.initializeApp(firebaseConfig);
-export const db = app.firestore();
+// 初期化 - Firebase Modular SDK (v9+) の形式に修正して、Property 'initializeApp' does not exist エラーを解消
+const app = initializeApp(firebaseConfig);
+// getFirestore を使用して Firestore インスタンスをエクスポート
+export const db = getFirestore(app);
