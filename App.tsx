@@ -25,7 +25,20 @@ import {
   CheckCircle2,
   PartyPopper,
   Info,
-  ExternalLink
+  ExternalLink,
+  AlertCircle,
+  Lock,
+  Plus,
+  Trash2,
+  MoreVertical,
+  X,
+  Settings,
+  Lightbulb,
+  UserPlus,
+  ShieldAlert,
+  Calendar,
+  History,
+  Clock
 } from 'lucide-react';
 
 // Firebase integration
@@ -43,12 +56,22 @@ const APP_STORAGE_KEYS = {
 };
 
 const INITIAL_USERS: User[] = [
-  { id: 'u1', name: '田中 里奈', role: UserRole.NEWBIE, clinicId: 'c1', password: '1234' },
+  { id: 'u1', name: '岡田 堂生', role: UserRole.NEWBIE, clinicId: 'c1', password: '1234' },
   { id: 'u3', name: '佐藤 結衣', role: UserRole.NEWBIE, clinicId: 'c1', password: '1234' },
   { id: 'u2', name: '鈴木 院長', role: UserRole.MENTOR, clinicId: 'c1', password: '1234' },
 ];
 
 // --- Helpers ---
+const getTodayStr = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+};
+
+const formatDisplayDate = (dateStr: string) => {
+  const [y, m, d] = dateStr.split('-');
+  return `${y}年${m}月${d}日`;
+};
+
 const getRankInfo = (progress: number) => {
   const PROGRESS_RANKS = [
     { min: 0, label: '研修生', color: 'bg-slate-400', icon: <UserIcon size={14} /> },
@@ -131,10 +154,14 @@ const NavItem: React.FC<{ to: string; icon: React.ReactNode; label: string; acti
 
 // --- Pages ---
 
-const DashboardPage: React.FC<any> = ({ user, allProgress, skills, allUsers, clinicName, memo, onSaveMemo, isSaving }) => {
+const DashboardPage: React.FC<any> = ({ user, allProgress, skills, allUsers, clinicName, memoData, onSaveMemo, isSaving }) => {
   const navigate = useNavigate();
-  const [tempMemo, setTempMemo] = useState(memo);
-  useEffect(() => setTempMemo(memo), [memo]);
+  const today = getTodayStr();
+  const [tempMemo, setTempMemo] = useState(memoData[today] || '');
+  
+  useEffect(() => {
+    setTempMemo(memoData[today] || '');
+  }, [memoData, today]);
   
   const newbieStats = allUsers.filter((u: User) => u.role === UserRole.NEWBIE).map((u: User) => ({
     ...u,
@@ -200,19 +227,26 @@ const DashboardPage: React.FC<any> = ({ user, allProgress, skills, allUsers, cli
       )}
 
       <section className="space-y-4">
-        <h3 className="text-[11px] font-black text-slate-400 flex items-center justify-between px-2 uppercase tracking-widest">
-          <div className="flex items-center gap-2"><StickyNote size={14} className="text-teal-600" /> 学習メモ</div>
-          {isSaving && <div className="text-teal-600 animate-pulse text-[8px] font-black uppercase">Cloud Sync...</div>}
-        </h3>
+        <div className="flex items-center justify-between px-2">
+          <h3 className="text-[11px] font-black text-slate-400 flex items-center gap-2 uppercase tracking-widest">
+            <StickyNote size={14} className="text-teal-600" /> 本日の学びログ
+          </h3>
+          <button 
+            onClick={() => navigate('/memo-history')} 
+            className="flex items-center gap-1 text-[10px] font-black text-teal-600 hover:opacity-70"
+          >
+            <History size={12} /> 過去の記録を見る
+          </button>
+        </div>
         <div className="bg-amber-50 rounded-[32px] p-6 border border-amber-100 shadow-sm space-y-4">
           <textarea 
             value={tempMemo} 
             onChange={(e) => setTempMemo(e.target.value)} 
-            placeholder="今日学んだことをメモ..." 
+            placeholder="今日学んだこと、気づいたことをメモ..." 
             className="w-full bg-transparent border-none outline-none text-sm text-amber-950 min-h-[140px] font-bold leading-relaxed resize-none" 
           />
           <button 
-            onClick={() => onSaveMemo(tempMemo)} 
+            onClick={() => onSaveMemo(today, tempMemo)} 
             className="w-full py-3 bg-amber-200 text-amber-900 text-[11px] font-black rounded-full hover:bg-amber-300 transition-all flex items-center justify-center gap-2 shadow-sm"
           >
             {isSaving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />} クラウドに保存して同期
@@ -223,13 +257,54 @@ const DashboardPage: React.FC<any> = ({ user, allProgress, skills, allUsers, cli
   );
 };
 
-const ProceduresPage: React.FC = () => {
+const MemoHistoryPage: React.FC<any> = ({ memoData }) => {
   const navigate = useNavigate();
-  const [search, setSearch] = useState('');
-  const filtered = MOCK_PROCEDURES.filter(p => p.title.includes(search) || p.category.includes(search));
+  // 逆順（新しい順）にソート
+  const sortedDates = Object.keys(memoData).sort().reverse();
 
   return (
-    <div className="p-4 space-y-6 pb-24 animate-in fade-in">
+    <div className="p-4 space-y-6 pb-24 animate-in slide-in-from-right-10 duration-500">
+      <div className="flex items-center gap-3">
+        <button onClick={() => navigate(-1)} className="p-2 bg-white rounded-xl shadow-sm"><ArrowLeft size={20} /></button>
+        <h2 className="text-xl font-black text-slate-800">ラーニング・ログ履歴</h2>
+      </div>
+
+      {sortedDates.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 text-slate-300 space-y-4">
+          <Calendar size={48} strokeWidth={1} />
+          <p className="font-black text-sm">まだ記録がありません</p>
+        </div>
+      ) : (
+        <div className="space-y-6 relative before:absolute before:left-4 before:top-4 before:bottom-4 before:w-0.5 before:bg-slate-100">
+          {sortedDates.map((date) => (
+            <div key={date} className="relative pl-10">
+              <div className="absolute left-2.5 top-1 w-3.5 h-3.5 bg-white border-2 border-teal-500 rounded-full z-10" />
+              <div className="bg-white p-5 rounded-[28px] border border-slate-100 shadow-sm space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full uppercase tracking-widest">
+                    {formatDisplayDate(date)}
+                  </span>
+                  <Clock size={12} className="text-slate-200" />
+                </div>
+                <p className="text-sm font-bold text-slate-700 leading-relaxed whitespace-pre-wrap">
+                  {memoData[date]}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ProceduresPage: React.FC<any> = ({ procedures, user }) => {
+  const navigate = useNavigate();
+  const [search, setSearch] = useState('');
+  const filtered = procedures.filter((p: Procedure) => p.title.includes(search) || p.category.includes(search));
+
+  return (
+    <div className="p-4 space-y-6 pb-32 animate-in fade-in relative min-h-full">
       <div className="flex items-center gap-3">
         <button onClick={() => navigate('/')} className="p-2 bg-white rounded-xl shadow-sm"><ArrowLeft size={20} /></button>
         <h2 className="text-xl font-black text-slate-800">手順書マニュアル</h2>
@@ -247,7 +322,7 @@ const ProceduresPage: React.FC = () => {
       </div>
 
       <div className="space-y-4">
-        {filtered.map(p => (
+        {filtered.map((p: Procedure) => (
           <button 
             key={p.id} 
             onClick={() => navigate(`/procedures/${p.id}`)}
@@ -264,72 +339,90 @@ const ProceduresPage: React.FC = () => {
           </button>
         ))}
       </div>
+
+      {user.role === UserRole.MENTOR && (
+        <button 
+          onClick={() => navigate('/procedures/new')}
+          className="fixed bottom-24 right-6 w-14 h-14 bg-teal-600 text-white rounded-full shadow-2xl flex items-center justify-center active:scale-95 transition-all z-40 border-4 border-white"
+        >
+          <Plus size={28} />
+        </button>
+      )}
     </div>
   );
 };
 
-const ProcedureDetailPage: React.FC = () => {
+const ProcedureDetailPage: React.FC<any> = ({ procedures, user, onDelete }) => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const procedure = MOCK_PROCEDURES.find(p => p.id === id);
+  const procedure = procedures.find((p: Procedure) => p.id === id);
 
-  if (!procedure) return <div>Not found</div>;
+  if (!procedure) return <div>Not Found</div>;
 
   return (
     <div className="p-4 space-y-6 pb-24 animate-in slide-in-from-right-10 duration-500">
       <div className="flex items-center justify-between">
         <button onClick={() => navigate('/procedures')} className="p-2 bg-white rounded-xl shadow-sm"><ArrowLeft size={20} /></button>
-        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{procedure.category}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{procedure.category}</span>
+          {user.role === UserRole.MENTOR && (
+            <div className="flex gap-1 ml-2">
+              <button onClick={() => navigate(`/procedures/edit/${procedure.id}`)} className="p-2 bg-amber-50 text-amber-600 rounded-lg"><Edit2 size={16} /></button>
+              <button onClick={() => { if(window.confirm('削除しますか？')) { onDelete(procedure.id); navigate('/procedures'); } }} className="p-2 bg-red-50 text-red-500 rounded-lg"><Trash2 size={16} /></button>
+            </div>
+          )}
+        </div>
       </div>
-
       <h2 className="text-2xl font-black text-slate-800 leading-tight">{procedure.title}</h2>
-
       {procedure.videoUrl && (
         <div className="aspect-video w-full rounded-[32px] overflow-hidden bg-slate-100 shadow-lg border-4 border-white">
-          <iframe 
-            src={formatEmbedUrl(procedure.videoUrl)} 
-            className="w-full h-full" 
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-            allowFullScreen 
-          />
+          <iframe src={formatEmbedUrl(procedure.videoUrl)} className="w-full h-full" allowFullScreen />
         </div>
       )}
-
       <div className="space-y-4">
-        <h3 className="text-[11px] font-black text-slate-400 flex items-center gap-2 uppercase tracking-widest px-2">
-          <ClipboardList size={14} className="text-blue-500" /> ステップ
-        </h3>
-        <div className="space-y-3">
-          {procedure.steps.map((step, i) => (
-            <div key={i} className="bg-white p-5 rounded-[24px] border border-slate-100 flex gap-4 items-start shadow-sm">
-              <div className="w-6 h-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-[10px] font-black flex-shrink-0 mt-0.5">{i+1}</div>
-              <p className="text-sm font-bold text-slate-700 leading-relaxed">{step}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {procedure.tips && (
-        <div className="bg-amber-50 rounded-[28px] p-6 border border-amber-100 shadow-sm flex gap-4">
-          <div className="p-2 bg-amber-200 rounded-xl text-amber-700 flex-shrink-0 self-start"><Info size={18} /></div>
-          <div>
-            <h4 className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1">アドバイス</h4>
-            <p className="text-sm font-bold text-amber-900 leading-relaxed">{procedure.tips}</p>
+        {procedure.steps.map((step: string, i: number) => (
+          <div key={i} className="bg-white p-5 rounded-[24px] border border-slate-100 flex gap-4 items-start shadow-sm">
+            <div className="w-6 h-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-[10px] font-black flex-shrink-0 mt-0.5">{i+1}</div>
+            <p className="text-sm font-bold text-slate-700 leading-relaxed">{step}</p>
           </div>
-        </div>
-      )}
+        ))}
+      </div>
     </div>
   );
 };
 
-const QAPage: React.FC = () => {
+const QAPage: React.FC<any> = ({ qaList, user, onSave, onDelete }) => {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const filtered = MOCK_QA.filter(q => q.question.includes(search) || q.answer.includes(search) || q.tags.some(t => t.includes(search)));
+  const [editingQA, setEditingQA] = useState<QA | null>(null);
+
+  const filtered = qaList.filter((q: QA) => q.question.includes(search) || q.answer.includes(search));
+
+  const handleEdit = (q: QA) => {
+    setEditingQA(q);
+  };
+
+  const handleCreate = () => {
+    setEditingQA({ id: `qa_${Date.now()}`, question: '', answer: '', tags: [] });
+  };
+
+  const handleSaveInternal = () => {
+    if (editingQA) {
+      onSave(editingQA);
+      setEditingQA(null);
+    }
+  };
 
   return (
-    <div className="p-4 space-y-6 pb-24 animate-in fade-in">
-      <h2 className="text-xl font-black text-slate-800 px-1">院内ナレッジQ&A</h2>
+    <div className="p-4 space-y-6 pb-32 animate-in fade-in">
+      <div className="flex justify-between items-center px-1">
+        <h2 className="text-xl font-black text-slate-800">院内ナレッジQ&A</h2>
+        <div className="flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-600 rounded-full">
+          <UsersIcon size={12} />
+          <span className="text-[8px] font-black uppercase">Shared Workspace</span>
+        </div>
+      </div>
 
       <div className="relative">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
@@ -343,23 +436,23 @@ const QAPage: React.FC = () => {
       </div>
 
       <div className="space-y-4">
-        {filtered.map(q => (
+        {filtered.map((q: QA) => (
           <div key={q.id} className="bg-white rounded-[28px] border border-slate-100 shadow-sm overflow-hidden">
-            <button 
-              onClick={() => setExpandedId(expandedId === q.id ? null : q.id)}
-              className="w-full p-5 text-left flex justify-between items-start"
-            >
-              <div className="flex gap-4">
+            <div className="flex justify-between items-start p-5">
+              <button 
+                onClick={() => setExpandedId(expandedId === q.id ? null : q.id)}
+                className="flex-1 text-left flex gap-4"
+              >
                 <div className="w-8 h-8 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center text-[10px] font-black flex-shrink-0">Q</div>
                 <div>
                   <p className="font-black text-slate-800 text-sm">{q.question}</p>
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {q.tags.map(t => <span key={t} className="px-2 py-0.5 bg-slate-50 text-slate-400 text-[8px] font-black rounded-md">#{t}</span>)}
-                  </div>
                 </div>
+              </button>
+              <div className="flex gap-2">
+                <button onClick={() => handleEdit(q)} className="p-1.5 text-slate-300 hover:text-amber-500 transition-colors"><Edit2 size={16} /></button>
+                <button onClick={() => { if(window.confirm('このナレッジを削除しますか？')) onDelete(q.id); }} className="p-1.5 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
               </div>
-              <ChevronRight size={18} className={`text-slate-300 transition-transform ${expandedId === q.id ? 'rotate-90' : ''}`} />
-            </button>
+            </div>
             {expandedId === q.id && (
               <div className="px-5 pb-6 animate-in slide-in-from-top-2">
                 <div className="flex gap-4">
@@ -373,18 +466,59 @@ const QAPage: React.FC = () => {
           </div>
         ))}
       </div>
+
+      <button onClick={handleCreate} className="fixed bottom-24 right-6 w-14 h-14 bg-amber-500 text-white rounded-full shadow-2xl flex items-center justify-center z-40 border-4 border-white active:scale-95 transition-all"><Plus size={28} /></button>
+
+      {editingQA && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] p-4 flex items-center justify-center">
+          <div className="bg-white w-full max-w-sm rounded-[40px] p-8 space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="p-2 bg-amber-50 text-amber-600 rounded-xl"><Lightbulb size={20} /></div>
+              <h3 className="font-black text-lg text-slate-800">ナレッジを共有</h3>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">質問・困りごと</label>
+              <textarea 
+                placeholder="例: SCチップの交換目安は？"
+                value={editingQA.question}
+                onChange={e => setEditingQA({...editingQA, question: e.target.value})}
+                className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none font-bold text-sm h-24 resize-none focus:ring-2 ring-amber-200 transition-all"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">回答・アドバイス</label>
+              <textarea 
+                placeholder="例: 使用時間が30時間を超えたら一度点検してください。"
+                value={editingQA.answer}
+                onChange={e => setEditingQA({...editingQA, answer: e.target.value})}
+                className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none font-bold text-sm h-32 resize-none focus:ring-2 ring-emerald-200 transition-all"
+              />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button onClick={() => setEditingQA(null)} className="flex-1 py-4 text-slate-400 font-black text-sm">キャンセル</button>
+              <button onClick={handleSaveInternal} className="flex-1 py-4 bg-teal-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-teal-100">保存して公開</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-const SkillMapPage: React.FC<any> = ({ user, skills, allProgress, allUsers, onUpdate }) => {
+const SkillMapPage: React.FC<any> = ({ user, skills, allProgress, allUsers, onUpdate, onSaveSkill, onDeleteSkill }) => {
   const { userId } = useParams();
   const targetId = userId || user.id;
   const targetUser = allUsers.find((u:any) => u.id === targetId) || user;
   const progressData = allProgress[targetId] || [];
   const stats = calculateProgress(skills, progressData);
   const rank = getRankInfo(stats);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingProgressId, setEditingProgressId] = useState<string | null>(null);
+  const [isManagingMaster, setIsManagingMaster] = useState(false);
+  const [editingMasterSkill, setEditingMasterSkill] = useState<Skill | null>(null);
+
+  const handleEditMaster = (s: Skill) => {
+    setEditingMasterSkill(s);
+  };
 
   return (
     <div className="p-4 space-y-6 pb-24 animate-in fade-in">
@@ -396,32 +530,47 @@ const SkillMapPage: React.FC<any> = ({ user, skills, allProgress, allUsers, onUp
             <div className={`px-2 py-0.5 rounded-full text-[8px] font-black text-white ${rank.color} inline-block`}>{rank.label}</div>
           </div>
         </div>
-        <div className="text-2xl font-black text-teal-600">{stats}%</div>
+        <div className="flex items-center gap-4">
+          <div className="text-2xl font-black text-teal-600">{stats}%</div>
+          {user.role === UserRole.MENTOR && (
+            <button onClick={() => setIsManagingMaster(!isManagingMaster)} className={`p-2 rounded-xl transition-all ${isManagingMaster ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-400'}`}><Settings size={18} /></button>
+          )}
+        </div>
       </div>
+
       <div className="space-y-4">
-        {skills.map((skill:any) => {
-          const p = progressData.find((sp:any) => sp.skillId === skill.id);
+        {skills.map((skill: Skill) => {
+          const p = progressData.find((sp: any) => sp.skillId === skill.id);
           const level = p?.level || 0;
           return (
-            <div key={skill.id} className="bg-white p-5 rounded-[28px] border border-slate-100">
+            <div key={skill.id} className="bg-white p-5 rounded-[28px] border border-slate-100 shadow-sm">
               <div className="flex justify-between items-center">
                 <div>
                   <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">{skill.category}</span>
                   <p className="font-black text-slate-800 text-sm">{skill.name}</p>
                 </div>
-                {user.role === UserRole.MENTOR && (
-                  <button onClick={() => setEditingId(editingId === skill.id ? null : skill.id)} className="p-2 bg-slate-50 rounded-xl text-slate-400"><Edit2 size={14} /></button>
-                )}
+                <div className="flex gap-1">
+                  {isManagingMaster ? (
+                    <div className="flex gap-2">
+                       <button onClick={() => handleEditMaster(skill)} className="p-2 text-slate-300 hover:text-teal-600"><Edit2 size={14} /></button>
+                       <button onClick={() => { if(window.confirm('スキル項目を削除しますか？')) onDeleteSkill(skill.id); }} className="p-2 text-slate-300 hover:text-red-500"><Trash2 size={14} /></button>
+                    </div>
+                  ) : (
+                    user.role === UserRole.MENTOR && (
+                      <button onClick={() => setEditingProgressId(editingProgressId === skill.id ? null : skill.id)} className="p-2 bg-slate-50 rounded-xl text-slate-400"><Edit2 size={14} /></button>
+                    )
+                  )}
+                </div>
               </div>
               <div className="mt-3 flex gap-1">
                 {[1, 2, 3].map(l => (
-                  <div key={l} className={`h-1.5 flex-1 rounded-full ${l <= level ? 'bg-teal-500' : 'bg-slate-100'}`} />
+                  <div key={l} className={`h-1.5 flex-1 rounded-full ${l <= level ? 'bg-teal-500 shadow-[0_0_8px_rgba(20,184,166,0.3)]' : 'bg-slate-100'}`} />
                 ))}
               </div>
-              {editingId === skill.id && (
+              {editingProgressId === skill.id && !isManagingMaster && (
                 <div className="mt-4 grid grid-cols-4 gap-2 animate-in zoom-in-95">
                   {[0, 1, 2, 3].map(l => (
-                    <button key={l} onClick={() => { onUpdate(targetId, skill.id, { level: l }); setEditingId(null); }} className={`py-2 rounded-xl text-[8px] font-black ${level === l ? 'bg-teal-600 text-white shadow-md' : 'bg-slate-50 text-slate-400'}`}>
+                    <button key={l} onClick={() => { onUpdate(targetId, skill.id, { level: l }); setEditingProgressId(null); }} className={`py-2 rounded-xl text-[8px] font-black ${level === l ? 'bg-teal-600 text-white shadow-md' : 'bg-slate-50 text-slate-400'}`}>
                       {SkillLevelLabels[l as SkillLevel]}
                     </button>
                   ))}
@@ -431,63 +580,212 @@ const SkillMapPage: React.FC<any> = ({ user, skills, allProgress, allUsers, onUp
           );
         })}
       </div>
+
+      {isManagingMaster && (
+        <button 
+          onClick={() => setEditingMasterSkill({ id: `s_${Date.now()}`, name: '', category: '基本スキル' })} 
+          className="w-full py-4 border-2 border-dashed border-slate-200 rounded-3xl text-slate-400 font-black text-sm flex items-center justify-center gap-2"
+        >
+          <Plus size={16} /> スキル項目を追加
+        </button>
+      )}
+
+      {editingMasterSkill && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] p-4 flex items-center justify-center">
+          <div className="bg-white w-full max-w-sm rounded-[40px] p-8 space-y-4 animate-in zoom-in-95">
+            <h3 className="font-black text-lg text-slate-800">マスター項目の編集</h3>
+            <div className="space-y-1">
+               <label className="text-[9px] font-black text-slate-400 uppercase">項目名</label>
+               <input 
+                type="text" 
+                value={editingMasterSkill.name}
+                onChange={e => setEditingMasterSkill({...editingMasterSkill, name: e.target.value})}
+                className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none font-bold text-sm"
+              />
+            </div>
+            <div className="space-y-1">
+               <label className="text-[9px] font-black text-slate-400 uppercase">カテゴリ</label>
+               <input 
+                type="text" 
+                value={editingMasterSkill.category}
+                onChange={e => setEditingMasterSkill({...editingMasterSkill, category: e.target.value})}
+                className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none font-bold text-sm"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setEditingMasterSkill(null)} className="flex-1 py-4 text-slate-400 font-black text-sm">キャンセル</button>
+              <button onClick={() => { onSaveSkill(editingMasterSkill); setEditingMasterSkill(null); }} className="flex-1 py-4 bg-teal-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-teal-100">保存する</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-const ProfilePage: React.FC<{ user: User; onLogout: () => void }> = ({ user, onLogout }) => (
-  <div className="p-8 space-y-8 pb-24 text-center">
-    <div className="w-24 h-24 bg-teal-50 text-teal-600 rounded-[32px] mx-auto flex items-center justify-center shadow-inner border-2 border-white">
-      <UserIcon size={40} />
-    </div>
-    <div>
-      <h2 className="text-2xl font-black text-slate-800">{user.name}</h2>
-      <p className="text-xs font-black text-slate-300 uppercase tracking-widest mt-1">
-        {user.role === UserRole.MENTOR ? 'Education Mentor' : 'Dental Hygienist'}
-      </p>
-    </div>
-    
-    <div className="bg-white p-6 rounded-[32px] border border-slate-100 space-y-4 shadow-sm text-left">
-      <div className="flex justify-between items-center pb-4 border-b border-slate-50">
-        <span className="text-[10px] font-black text-slate-400 uppercase">Clinic</span>
-        <span className="text-sm font-black text-slate-800">{DEFAULT_CLINIC_NAME}</span>
+const ProfilePage: React.FC<{ user: User; allUsers: User[]; onDeleteUser: (id: string) => void; onLogout: () => void }> = ({ user, allUsers, onDeleteUser, onLogout }) => (
+  <div className="p-8 space-y-8 pb-32 animate-in fade-in">
+    <div className="text-center space-y-4">
+      <div className="w-24 h-24 bg-teal-50 text-teal-600 rounded-[32px] mx-auto flex items-center justify-center shadow-inner border-2 border-white">
+        <UserIcon size={40} />
       </div>
-      <div className="flex justify-between items-center">
-        <span className="text-[10px] font-black text-slate-400 uppercase">Version</span>
-        <span className="text-xs font-black text-teal-600">v1.2.0 Cloud Live</span>
+      <div>
+        <h2 className="text-2xl font-black text-slate-800">{user.name}</h2>
+        <p className="text-xs font-black text-slate-300 uppercase tracking-widest mt-1">{user.role === UserRole.MENTOR ? 'Education Mentor' : 'Dental Hygienist'}</p>
       </div>
     </div>
 
-    <button onClick={onLogout} className="w-full py-5 bg-red-50 text-red-500 rounded-[28px] font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-all">
-      ログアウトして終了
-    </button>
+    <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm text-left space-y-4">
+       <div className="flex justify-between items-center pb-4 border-b border-slate-50">
+          <span className="text-[10px] font-black text-slate-400 uppercase">Clinic</span>
+          <span className="text-sm font-black text-slate-800">{DEFAULT_CLINIC_NAME}</span>
+       </div>
+       <div className="flex justify-between items-center">
+          <span className="text-[10px] font-black text-slate-400 uppercase">Version</span>
+          <span className="text-xs font-black text-teal-600">v1.7.0 Learning Log Cloud</span>
+       </div>
+    </div>
+
+    {user.role === UserRole.MENTOR && (
+      <div className="space-y-4 pt-4">
+        <h3 className="text-[11px] font-black text-slate-400 flex items-center gap-2 uppercase tracking-widest px-2">
+          <ShieldAlert size={14} className="text-red-500" /> スタッフ管理（管理者限定）
+        </h3>
+        <div className="space-y-2">
+          {allUsers.map((u: User) => (
+            <div key={u.id} className="bg-white p-4 rounded-[24px] border border-slate-50 shadow-sm flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs ${u.role === UserRole.MENTOR ? 'bg-amber-50 text-amber-600' : 'bg-teal-50 text-teal-600'}`}>
+                  {u.name.charAt(0)}
+                </div>
+                <div>
+                  <p className="text-sm font-black text-slate-800">{u.name} {u.id === user.id && <span className="text-[8px] bg-slate-100 px-1 rounded ml-1 text-slate-400">自分</span>}</p>
+                  <p className="text-[9px] font-bold text-slate-300 uppercase">{u.role}</p>
+                </div>
+              </div>
+              {u.id !== user.id && (
+                <button 
+                  onClick={() => { if(window.confirm(`${u.name}さんを削除してもよろしいですか？学習データも削除されます。`)) onDeleteUser(u.id); }}
+                  className="p-2 text-slate-200 hover:text-red-500 transition-colors"
+                >
+                  <Trash2 size={18} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+
+    <button onClick={onLogout} className="w-full py-5 bg-red-50 text-red-500 rounded-[28px] font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-all">ログアウトして終了</button>
   </div>
 );
 
-const LoginPage: React.FC<any> = ({ users, onLogin }) => {
+const ProcedureEditPage: React.FC<any> = ({ procedures, onSave }) => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const isNew = !id;
+  const existing = procedures.find((p: Procedure) => p.id === id);
+  const [form, setForm] = useState<Partial<Procedure>>(existing || { title: '', category: '基本準備', steps: [''], tips: '', videoUrl: '' });
+
+  const handleSubmit = () => {
+    if(!form.title) return alert('タイトル必須');
+    onSave({...form, id: form.id || `p_${Date.now()}`});
+    navigate('/procedures');
+  };
+
+  return (
+    <div className="p-4 space-y-6 pb-32 animate-in slide-in-from-bottom-5">
+      <div className="flex items-center justify-between">
+        <button onClick={() => navigate(-1)} className="p-2 bg-white rounded-xl shadow-sm"><X size={20} /></button>
+        <h2 className="text-lg font-black text-slate-800">{isNew ? '新規作成' : '編集'}</h2>
+        <button onClick={handleSubmit} className="p-2 bg-teal-600 text-white rounded-xl shadow-md"><Save size={20} /></button>
+      </div>
+      <div className="space-y-4">
+        <input value={form.title} onChange={e => setForm({...form, title: e.target.value})} placeholder="手順タイトル" className="w-full p-4 bg-white border border-slate-100 rounded-2xl font-bold outline-none" />
+        <input value={form.category} onChange={e => setForm({...form, category: e.target.value})} placeholder="カテゴリ" className="w-full p-4 bg-white border border-slate-100 rounded-2xl font-bold outline-none" />
+        {form.steps?.map((step, i) => (
+           <textarea key={i} value={step} onChange={e => { const s = [...form.steps!]; s[i] = e.target.value; setForm({...form, steps: s}); }} placeholder={`ステップ ${i+1}`} className="w-full p-4 bg-white border border-slate-100 rounded-2xl font-bold text-sm min-h-[60px]" />
+        ))}
+        <button onClick={() => setForm({...form, steps: [...form.steps!, '']})} className="text-xs font-black text-teal-600 uppercase">+ ステップを追加</button>
+      </div>
+    </div>
+  );
+};
+
+const LoginPage: React.FC<any> = ({ users, onLogin, onCreateUser }) => {
+  const [mode, setMode] = useState<'select' | 'auth' | 'create'>('select');
   const [selected, setSelected] = useState<User | null>(null);
   const [pass, setPass] = useState('');
+  const [newName, setNewName] = useState('');
+  const [newPass, setNewPass] = useState('');
+  const [isError, setIsError] = useState(false);
+
+  const handleLoginClick = () => {
+    if (selected && pass === selected.password) onLogin(selected);
+    else { setIsError(true); setTimeout(() => setIsError(false), 2000); }
+  };
+
+  const handleCreate = () => {
+    if(!newName || !newPass) return alert('名前とパスワードを入力してください');
+    onCreateUser(newName, newPass);
+    setMode('select');
+    setNewName('');
+    setNewPass('');
+  };
+
   return (
-    <div className="p-8 flex flex-col items-center justify-center min-h-[80vh] space-y-8">
+    <div className="p-8 flex flex-col items-center justify-center min-h-[80vh] space-y-8 animate-in fade-in">
       <div className="text-center space-y-2">
         <div className="w-20 h-20 bg-teal-600 rounded-[24px] mx-auto flex items-center justify-center shadow-2xl"><ClipboardList size={40} className="text-white" /></div>
-        <h2 className="text-2xl font-black text-slate-800">なないろアプリ</h2>
+        <h2 className="text-2xl font-black text-slate-800 tracking-tight">なないろアプリ</h2>
         <p className="text-[10px] text-slate-300 font-black uppercase tracking-widest">{DEFAULT_CLINIC_NAME}</p>
       </div>
-      {!selected ? (
+
+      {mode === 'select' && (
         <div className="w-full space-y-3">
-          {users.map((u:any) => (
-            <button key={u.id} onClick={() => setSelected(u)} className="w-full p-5 bg-white border border-slate-100 rounded-[28px] flex justify-between items-center shadow-sm active:scale-95 transition-all">
-              <span className="font-black text-slate-700">{u.name}</span>
-              <ChevronRight size={18} className="text-slate-200" />
-            </button>
-          ))}
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center mb-2">ユーザーを選択</p>
+          <div className="space-y-3 max-h-[40vh] overflow-y-auto no-scrollbar pb-4">
+            {users.map((u:any) => (
+              <button key={u.id} onClick={() => { setSelected(u); setMode('auth'); }} className="w-full p-5 bg-white border border-slate-100 rounded-[28px] flex justify-between items-center shadow-sm active:scale-95 transition-all">
+                <span className="font-black text-slate-700">{u.name}</span>
+                <ChevronRight size={18} className="text-slate-200" />
+              </button>
+            ))}
+          </div>
+          <button onClick={() => setMode('create')} className="w-full py-4 border-2 border-dashed border-slate-200 text-slate-400 rounded-[28px] flex items-center justify-center gap-2 font-black text-xs active:scale-95 transition-all">
+            <UserPlus size={16} /> 新しいスタッフを登録
+          </button>
         </div>
-      ) : (
+      )}
+
+      {mode === 'auth' && selected && (
         <div className="w-full space-y-4 bg-white p-10 rounded-[40px] border border-slate-100 animate-in zoom-in-95">
-          <input type="password" placeholder="••••" value={pass} onChange={e => setPass(e.target.value)} className="w-full p-5 bg-slate-50 border-none rounded-2xl text-center text-xl font-black outline-none" />
-          <button onClick={() => onLogin(selected)} className="w-full py-5 bg-teal-600 text-white rounded-2xl font-black shadow-lg shadow-teal-100">ログイン</button>
-          <button onClick={() => setSelected(null)} className="w-full text-[10px] text-slate-300 font-black uppercase tracking-widest">戻る</button>
+          <div className="text-center mb-4">
+             <div className="w-12 h-12 bg-teal-50 text-teal-600 rounded-full flex items-center justify-center mx-auto mb-2 font-black text-xl">{selected.name.charAt(0)}</div>
+             <p className="text-sm font-black text-slate-700">{selected.name}</p>
+          </div>
+          <input type="password" value={pass} onChange={e => {setPass(e.target.value); setIsError(false);}} className={`w-full p-5 bg-slate-50 border-2 rounded-2xl text-center text-xl font-black outline-none transition-all ${isError ? 'border-red-400 bg-red-50' : 'border-transparent focus:border-teal-500'}`} placeholder="Password" autoFocus />
+          <button onClick={handleLoginClick} className="w-full py-5 bg-teal-600 text-white rounded-2xl font-black shadow-lg shadow-teal-100 active:scale-95 transition-all">ログイン</button>
+          <button onClick={() => {setMode('select'); setPass('');}} className="w-full text-[10px] text-slate-300 font-black uppercase tracking-widest pt-2">戻る</button>
+        </div>
+      )}
+
+      {mode === 'create' && (
+        <div className="w-full space-y-4 bg-white p-10 rounded-[40px] border border-slate-100 animate-in zoom-in-95">
+          <h3 className="text-center font-black text-slate-800 mb-4">スタッフ登録</h3>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">お名前</label>
+              <input type="text" value={newName} onChange={e => setNewName(e.target.value)} placeholder="例: 佐藤 結衣" className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-teal-500 transition-all" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">ログイン用パスワード</label>
+              <input type="password" value={newPass} onChange={e => setNewPass(e.target.value)} placeholder="••••" className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-teal-500 transition-all text-center" />
+            </div>
+          </div>
+          <button onClick={handleCreate} className="w-full py-5 bg-teal-600 text-white rounded-2xl font-black shadow-lg shadow-teal-100 active:scale-95 transition-all mt-4">アカウント作成</button>
+          <button onClick={() => setMode('select')} className="w-full text-[10px] text-slate-300 font-black uppercase tracking-widest pt-2">キャンセル</button>
         </div>
       )}
     </div>
@@ -500,10 +798,13 @@ const AppContent: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [allUsers] = useState<User[]>(INITIAL_USERS);
   const [user, setUser] = useState<User | null>(null);
+  const [allUsers, setAllUsers] = useState<User[]>(INITIAL_USERS);
   const [allSkillProgress, setAllSkillProgress] = useState<Record<string, UserSkillProgress[]>>({});
-  const [currentMemo, setCurrentMemo] = useState<string>('');
+  const [procedures, setProcedures] = useState<Procedure[]>([]);
+  const [skills, setSkills] = useState<Skill[]>([]);
+  const [qaList, setQaList] = useState<QA[]>([]);
+  const [memoData, setMemoData] = useState<Record<string, string>>({});
   
   const [isSaving, setIsSaving] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -513,71 +814,92 @@ const AppContent: React.FC = () => {
     if (savedLogged) setUser(JSON.parse(savedLogged));
   }, []);
 
-  // リアルタイム同期
   useEffect(() => {
-    if (!user) return;
-
+    const clinicId = user?.clinicId || 'c1';
     setIsSyncing(true);
     
-    // 1. メモ同期
-    const unsubMemo = onSnapshot(doc(db, 'memos', user.id), (snap) => {
-      if (snap.exists()) setCurrentMemo(snap.data().content || '');
-      setIsSyncing(false);
-    }, () => setIsSyncing(false));
-
-    // 2. 全スタッフの進捗同期
-    const unsubProgress = onSnapshot(doc(db, 'clinic_data', 'c1'), (snap) => {
+    const unsubClinic = onSnapshot(doc(db, 'clinic_data', clinicId), snap => {
       if (snap.exists()) {
-        const data = snap.data().allProgress || {};
-        setAllSkillProgress(data);
-        localStorage.setItem(APP_STORAGE_KEYS.PROGRESS, JSON.stringify(data));
+        const data = snap.data();
+        setAllUsers(data.users || INITIAL_USERS);
+        setAllSkillProgress(data.allProgress || {});
+        setProcedures(data.procedures || MOCK_PROCEDURES);
+        setSkills(data.skills || MOCK_SKILLS);
+        setQaList(data.qa || MOCK_QA);
+      } else {
+        setDoc(doc(db, 'clinic_data', clinicId), { 
+          users: INITIAL_USERS,
+          procedures: MOCK_PROCEDURES, 
+          skills: MOCK_SKILLS, 
+          qa: MOCK_QA, 
+          allProgress: {} 
+        });
       }
+      setIsSyncing(false);
     });
 
-    return () => { unsubMemo(); unsubProgress(); };
+    return () => unsubClinic();
+  }, [user?.clinicId]);
+
+  // 個別メモ同期（日付ベースのオブジェクト）
+  useEffect(() => {
+    if (!user) return;
+    const unsubMemo = onSnapshot(doc(db, 'memos', user.id), snap => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setMemoData(data.entries || {});
+      }
+    });
+    return () => unsubMemo();
   }, [user]);
 
-  const handleSaveMemo = async (content: string) => {
-    if (!user) return;
-    setIsSaving(true);
-    try {
-      await setDoc(doc(db, 'memos', user.id), {
-        content,
-        updatedAt: serverTimestamp(),
-        userId: user.id,
-        userName: user.name
-      });
-      setCurrentMemo(content);
-    } catch (e) { console.error("Cloud Save Error:", e); } finally { setIsSaving(false); }
+  const handleCreateUser = async (name: string, pass: string) => {
+    const newUser: User = {
+      id: `u_${Date.now()}`,
+      name,
+      password: pass,
+      role: UserRole.NEWBIE,
+      clinicId: user?.clinicId || 'c1'
+    };
+    const nextUsers = [...allUsers, newUser];
+    setAllUsers(nextUsers);
+    await setDoc(doc(db, 'clinic_data', user?.clinicId || 'c1'), { users: nextUsers }, { merge: true });
+  };
+
+  const handleDeleteUser = async (targetId: string) => {
+    const nextUsers = allUsers.filter(u => u.id !== targetId);
+    setAllUsers(nextUsers);
+    await setDoc(doc(db, 'clinic_data', user?.clinicId || 'c1'), { users: nextUsers }, { merge: true });
   };
 
   const handleUpdateProgress = async (uId: string, sId: string, updates: any) => {
     const userProgress = [...(allSkillProgress[uId] || [])];
     const index = userProgress.findIndex(p => p.skillId === sId);
-    const now = new Date().toISOString();
-    
-    if (index >= 0) userProgress[index] = { ...userProgress[index], ...updates, updatedAt: now };
-    else userProgress.push({ userId: uId, skillId: sId, level: updates.level, mentorComment: updates.mentorComment || '', updatedAt: now });
-    
+    if (index >= 0) userProgress[index] = { ...userProgress[index], ...updates, updatedAt: new Date().toISOString() };
+    else userProgress.push({ userId: uId, skillId: sId, level: updates.level, updatedAt: new Date().toISOString() });
     const newAllProgress = { ...allSkillProgress, [uId]: userProgress };
     setAllSkillProgress(newAllProgress);
+    await setDoc(doc(db, 'clinic_data', user?.clinicId || 'c1'), { allProgress: newAllProgress }, { merge: true });
+  };
 
+  const handleSaveMaster = async (key: string, list: any[]) => {
+    setIsSaving(true);
     try {
-      await setDoc(doc(db, 'clinic_data', 'c1'), { allProgress: newAllProgress }, { merge: true });
-    } catch (e) { console.error("Cloud Sync Error:", e); }
+      await setDoc(doc(db, 'clinic_data', user?.clinicId || 'c1'), { [key]: list }, { merge: true });
+    } finally { setIsSaving(false); }
   };
 
-  const handleLogin = (u: User) => {
-    setUser(u);
-    localStorage.setItem(APP_STORAGE_KEYS.LOGGED_USER, JSON.stringify(u));
-    navigate('/');
+  const handleSaveMemo = async (date: string, content: string) => {
+    if (!user) return;
+    setIsSaving(true);
+    const newMemoData = { ...memoData, [date]: content };
+    setMemoData(newMemoData);
+    await setDoc(doc(db, 'memos', user.id), { entries: newMemoData });
+    setIsSaving(false);
   };
 
-  const handleLogout = () => {
-    setUser(null);
-    localStorage.removeItem(APP_STORAGE_KEYS.LOGGED_USER);
-    navigate('/login');
-  };
+  const handleLogin = (u: User) => { setUser(u); localStorage.setItem(APP_STORAGE_KEYS.LOGGED_USER, JSON.stringify(u)); navigate('/'); };
+  const handleLogout = () => { setUser(null); setMemoData({}); localStorage.removeItem(APP_STORAGE_KEYS.LOGGED_USER); navigate('/login'); };
 
   if (!user && location.pathname !== '/login') return <Navigate to="/login" replace />;
 
@@ -586,19 +908,22 @@ const AppContent: React.FC = () => {
       <Header user={user} clinicName={DEFAULT_CLINIC_NAME} isSyncing={isSyncing} />
       <main className="flex-1 overflow-y-auto no-scrollbar">
         <Routes>
-          <Route path="/login" element={<LoginPage users={allUsers} onLogin={handleLogin} />} />
-          <Route path="/" element={<DashboardPage user={user!} allProgress={allSkillProgress} skills={MOCK_SKILLS} allUsers={allUsers} clinicName={DEFAULT_CLINIC_NAME} memo={currentMemo} onSaveMemo={handleSaveMemo} isSaving={isSaving} />} />
-          <Route path="/procedures" element={<ProceduresPage />} />
-          <Route path="/procedures/:id" element={<ProcedureDetailPage />} />
-          <Route path="/skills" element={<SkillMapPage user={user!} skills={MOCK_SKILLS} allProgress={allSkillProgress} allUsers={allUsers} onUpdate={handleUpdateProgress} />} />
-          <Route path="/skills/:userId" element={<SkillMapPage user={user!} skills={MOCK_SKILLS} allProgress={allSkillProgress} allUsers={allUsers} onUpdate={handleUpdateProgress} />} />
-          <Route path="/qa" element={<QAPage />} />
-          <Route path="/profile" element={<ProfilePage user={user!} onLogout={handleLogout} />} />
+          <Route path="/login" element={<LoginPage users={allUsers} onLogin={handleLogin} onCreateUser={handleCreateUser} />} />
+          <Route path="/" element={<DashboardPage user={user!} allProgress={allSkillProgress} skills={skills} allUsers={allUsers} clinicName={DEFAULT_CLINIC_NAME} memoData={memoData} onSaveMemo={handleSaveMemo} isSaving={isSaving} />} />
+          <Route path="/memo-history" element={<MemoHistoryPage memoData={memoData} />} />
+          <Route path="/procedures" element={<ProceduresPage procedures={procedures} user={user!} />} />
+          <Route path="/procedures/new" element={<ProcedureEditPage procedures={procedures} onSave={(p: Procedure) => handleSaveMaster('procedures', [...procedures, p])} />} />
+          <Route path="/procedures/edit/:id" element={<ProcedureEditPage procedures={procedures} onSave={(p: Procedure) => handleSaveMaster('procedures', procedures.map(old => old.id === p.id ? p : old))} />} />
+          <Route path="/procedures/:id" element={<ProcedureDetailPage procedures={procedures} user={user!} onDelete={(id: string) => handleSaveMaster('procedures', procedures.filter(p => p.id !== id))} />} />
+          <Route path="/skills" element={<SkillMapPage user={user!} skills={skills} allProgress={allSkillProgress} allUsers={allUsers} onUpdate={handleUpdateProgress} onSaveSkill={(s: Skill) => handleSaveMaster('skills', skills.some(os => os.id === s.id) ? skills.map(os => os.id === s.id ? s : os) : [...skills, s])} onDeleteSkill={(id: string) => handleSaveMaster('skills', skills.filter(s => s.id !== id))} />} />
+          <Route path="/skills/:userId" element={<SkillMapPage user={user!} skills={skills} allProgress={allSkillProgress} allUsers={allUsers} onUpdate={handleUpdateProgress} onSaveSkill={(s: Skill) => handleSaveMaster('skills', skills.some(os => os.id === s.id) ? skills.map(os => os.id === s.id ? s : os) : [...skills, s])} onDeleteSkill={(id: string) => handleSaveMaster('skills', skills.filter(s => s.id !== id))} />} />
+          <Route path="/qa" element={<QAPage qaList={qaList} user={user!} onSave={(q: QA) => handleSaveMaster('qa', qaList.some(oq => oq.id === q.id) ? qaList.map(oq => oq.id === q.id ? q : oq) : [...qaList, q])} onDelete={(id: string) => handleSaveMaster('qa', qaList.filter(q => q.id !== id))} />} />
+          <Route path="/profile" element={<ProfilePage user={user!} allUsers={allUsers} onDeleteUser={handleDeleteUser} onLogout={handleLogout} />} />
         </Routes>
       </main>
       {user && <Navigation />}
       {isSaving && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-full text-[9px] font-black tracking-widest flex items-center gap-3 shadow-2xl animate-in slide-in-from-bottom-2 z-[60]">
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-full text-[9px] font-black tracking-widest flex items-center gap-3 shadow-2xl z-[60] animate-in slide-in-from-bottom-2">
           <PartyPopper size={14} className="text-emerald-400" /> CLOUD SYNCED
         </div>
       )}
