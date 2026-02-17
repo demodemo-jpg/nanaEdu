@@ -20,7 +20,6 @@ import {
   BookOpen,
   StickyNote,
   Save,
-  Video,
   RefreshCw,
   CheckCircle2,
   PartyPopper,
@@ -60,8 +59,7 @@ import { MOCK_PROCEDURES, MOCK_SKILLS, MOCK_QA } from './constants';
 
 const DEFAULT_CLINIC_NAME = "なないろ歯科";
 const APP_STORAGE_KEYS = {
-  LOGGED_USER: 'dh_path_logged_user',
-  PROGRESS: 'dh_path_all_skill_progress'
+  LOGGED_USER: 'dh_path_logged_user'
 };
 
 const INITIAL_USERS: User[] = [
@@ -843,7 +841,7 @@ const ProfilePage: React.FC<{ user: User; allUsers: User[]; onDeleteUser: (id: s
        </div>
        <div className="flex justify-between items-center">
           <span className="text-[10px] font-black text-slate-400 uppercase">Version</span>
-          <span className="text-xs font-black text-teal-600">v2.0.0 Direct File Upload</span>
+          <span className="text-xs font-black text-teal-600">v2.1.0 Cloud Stabilized</span>
        </div>
     </div>
 
@@ -978,7 +976,13 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     const savedLogged = localStorage.getItem(APP_STORAGE_KEYS.LOGGED_USER);
-    if (savedLogged) setUser(JSON.parse(savedLogged));
+    if (savedLogged) {
+        try {
+            setUser(JSON.parse(savedLogged));
+        } catch (e) {
+            localStorage.removeItem(APP_STORAGE_KEYS.LOGGED_USER);
+        }
+    }
   }, []);
 
   useEffect(() => {
@@ -1003,6 +1007,9 @@ const AppContent: React.FC = () => {
         });
       }
       setIsSyncing(false);
+    }, (err) => {
+        console.error("Firestore sync error:", err);
+        setIsSyncing(false);
     });
 
     return () => unsubClinic();
@@ -1051,7 +1058,11 @@ const AppContent: React.FC = () => {
   const handleSaveMaster = async (key: string, list: any[]) => {
     setIsSaving(true);
     try {
-      await setDoc(doc(db, 'clinic_data', user?.clinicId || 'c1'), { [key]: list }, { merge: true });
+      // プレーンな配列として保存することを保証
+      const cleanList = JSON.parse(JSON.stringify(list));
+      await setDoc(doc(db, 'clinic_data', user?.clinicId || 'c1'), { [key]: cleanList }, { merge: true });
+    } catch (err) {
+      console.error("Save error:", err);
     } finally { setIsSaving(false); }
   };
 
@@ -1064,8 +1075,18 @@ const AppContent: React.FC = () => {
     setIsSaving(false);
   };
 
-  const handleLogin = (u: User) => { setUser(u); localStorage.setItem(APP_STORAGE_KEYS.LOGGED_USER, JSON.stringify(u)); navigate('/'); };
-  const handleLogout = () => { setUser(null); setMemoData({}); localStorage.removeItem(APP_STORAGE_KEYS.LOGGED_USER); navigate('/login'); };
+  const handleLogin = (u: User) => { 
+    setUser(u); 
+    localStorage.setItem(APP_STORAGE_KEYS.LOGGED_USER, JSON.stringify(u)); 
+    navigate('/'); 
+  };
+  
+  const handleLogout = () => { 
+    setUser(null); 
+    setMemoData({}); 
+    localStorage.removeItem(APP_STORAGE_KEYS.LOGGED_USER); 
+    navigate('/login'); 
+  };
 
   if (!user && location.pathname !== '/login') return <Navigate to="/login" replace />;
 
