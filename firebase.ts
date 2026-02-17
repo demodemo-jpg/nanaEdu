@@ -2,7 +2,7 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 
-// ユーザー提供の実際のFirebase設定
+// Firebase設定
 const firebaseConfig = {
   apiKey: "AIzaSyCfvR32d-2s6v7-vrdeCRJlScl8ygFlV0s",
   authDomain: "hirukawasaku.firebaseapp.com",
