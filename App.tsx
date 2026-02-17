@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { HashRouter as Router, Routes, Route, Link, useNavigate, useLocation, useParams, Navigate } from 'react-router-dom';
 import { 
   ClipboardList, 
@@ -40,7 +40,14 @@ import {
   History,
   Clock,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  FileText,
+  Image as ImageIcon,
+  PlayCircle,
+  FileDown,
+  UploadCloud,
+  FileUp,
+  Loader2
 } from 'lucide-react';
 
 // Firebase integration
@@ -48,7 +55,7 @@ import { db } from './firebase';
 import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 
 // --- Types & Config ---
-import { UserRole, SkillLevel, SkillLevelLabels, UserSkillProgress, Procedure, Skill, User, QA } from './types';
+import { UserRole, SkillLevel, SkillLevelLabels, UserSkillProgress, Procedure, Skill, User, QA, Attachment } from './types';
 import { MOCK_PROCEDURES, MOCK_SKILLS, MOCK_QA } from './constants';
 
 const DEFAULT_CLINIC_NAME = "なないろ歯科";
@@ -97,6 +104,7 @@ const calculateProgress = (skills: Skill[], progress: UserSkillProgress[]) => {
 
 const formatEmbedUrl = (url?: string) => {
   if (!url) return "";
+  if (url.startsWith('data:')) return ""; // Base64はiframeには不向き（動画の場合）
   if (url.includes('youtube.com/embed')) return url;
   if (url.includes('youtube.com/watch?v=')) {
     const id = url.split('v=')[1]?.split('&')[0];
@@ -261,7 +269,6 @@ const DashboardPage: React.FC<any> = ({ user, allProgress, skills, allUsers, cli
 
 const MemoHistoryPage: React.FC<any> = ({ memoData }) => {
   const navigate = useNavigate();
-  // 逆順（新しい順）にソート
   const sortedDates = Object.keys(memoData).sort().reverse();
 
   return (
@@ -361,6 +368,54 @@ const ProcedureDetailPage: React.FC<any> = ({ procedures, user, onDelete }) => {
 
   if (!procedure) return <div>Not Found</div>;
 
+  const renderAttachment = (att: Attachment) => {
+    switch (att.type) {
+      case 'video':
+        const embedUrl = formatEmbedUrl(att.url);
+        if (!embedUrl) {
+           return (
+             <a key={att.id} href={att.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-4 bg-amber-50 text-amber-700 rounded-2xl border border-amber-100">
+               <div className="flex items-center gap-3">
+                 <PlayCircle size={20} className="text-amber-500" />
+                 <p className="text-xs font-black">{att.name || '動画ファイル'}</p>
+               </div>
+               <ExternalLink size={14} />
+             </a>
+           );
+        }
+        return (
+          <div key={att.id} className="space-y-2">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><PlayCircle size={12}/> {att.name}</p>
+            <div className="aspect-video w-full rounded-2xl overflow-hidden bg-black shadow-md border border-slate-100">
+              <iframe src={embedUrl} className="w-full h-full" allowFullScreen />
+            </div>
+          </div>
+        );
+      case 'image':
+        return (
+          <div key={att.id} className="space-y-2">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><ImageIcon size={12}/> {att.name}</p>
+            <img src={att.url} alt={att.name} className="w-full rounded-2xl shadow-md border border-slate-100 object-cover max-h-[500px]" />
+          </div>
+        );
+      case 'pdf':
+        return (
+          <a key={att.id} href={att.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-4 bg-blue-50 text-blue-700 rounded-2xl border border-blue-100 hover:bg-blue-100 transition-colors group">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm text-blue-500 group-hover:scale-110 transition-transform"><FileText size={20} /></div>
+              <div className="text-left">
+                <p className="text-xs font-black leading-tight">{att.name}</p>
+                <p className="text-[8px] font-bold opacity-60 uppercase mt-0.5">PDF Documents</p>
+              </div>
+            </div>
+            <FileDown size={18} className="opacity-40" />
+          </a>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="p-4 space-y-6 pb-24 animate-in slide-in-from-right-10 duration-500">
       <div className="flex items-center justify-between">
@@ -375,23 +430,196 @@ const ProcedureDetailPage: React.FC<any> = ({ procedures, user, onDelete }) => {
           )}
         </div>
       </div>
+
       <h2 className="text-2xl font-black text-slate-800 leading-tight">{procedure.title}</h2>
-      {procedure.videoUrl && (
-        <div className="aspect-video w-full rounded-[32px] overflow-hidden bg-slate-100 shadow-lg border-4 border-white">
-          <iframe src={formatEmbedUrl(procedure.videoUrl)} className="w-full h-full" allowFullScreen />
+
+      {procedure.attachments && procedure.attachments.length > 0 && (
+        <div className="space-y-6">
+          {procedure.attachments.map(renderAttachment)}
         </div>
       )}
-      <div className="space-y-4">
+
+      <div className="space-y-4 pt-4">
+        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">ステップ解説</h3>
         {procedure.steps.map((step: string, i: number) => (
-          <div key={i} className="bg-white p-5 rounded-[24px] border border-slate-100 flex gap-4 items-start shadow-sm">
+          <div key={i} className="bg-white p-5 rounded-[24px] border border-slate-100 flex gap-4 items-start shadow-sm hover:border-teal-100 transition-colors">
             <div className="w-6 h-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-[10px] font-black flex-shrink-0 mt-0.5">{i+1}</div>
             <p className="text-sm font-bold text-slate-700 leading-relaxed">{step}</p>
           </div>
         ))}
       </div>
+
+      {procedure.tips && (
+        <div className="bg-emerald-50 p-6 rounded-[32px] border border-emerald-100 flex gap-4 items-start">
+          <div className="p-2 bg-white rounded-xl text-emerald-600 shadow-sm"><CheckCircle2 size={18} /></div>
+          <div>
+            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">Clinic Tips</p>
+            <p className="text-sm font-bold text-emerald-800 leading-relaxed">{procedure.tips}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
+const ProcedureEditPage: React.FC<any> = ({ procedures, onSave }) => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const isNew = !id;
+  const existing = procedures.find((p: Procedure) => p.id === id);
+  const [form, setForm] = useState<Partial<Procedure>>(existing || { title: '', category: '基本準備', steps: [''], tips: '', attachments: [] });
+  const [isReadingFile, setIsReadingFile] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [activeAttIdForUpload, setActiveAttIdForUpload] = useState<string | null>(null);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeAttIdForUpload) return;
+
+    // ファイルサイズの簡易チェック（Firestoreの制限1MBを考慮）
+    if (file.size > 1024 * 1024) {
+      alert("ファイルが大きすぎます (最大1MB)。写真を縮小するか、別のファイルを選択してください。");
+      return;
+    }
+
+    setIsReadingFile(activeAttIdForUpload);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      updateAttachment(activeAttIdForUpload, { url: base64, name: file.name });
+      setIsReadingFile(null);
+      setActiveAttIdForUpload(null);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const triggerFileUpload = (attId: string) => {
+    setActiveAttIdForUpload(attId);
+    fileInputRef.current?.click();
+  };
+
+  const addAttachment = (type: 'video' | 'image' | 'pdf') => {
+    const newAtt: Attachment = { id: `att_${Date.now()}`, type, name: '', url: '' };
+    setForm({ ...form, attachments: [...(form.attachments || []), newAtt] });
+  };
+
+  const updateAttachment = (attId: string, updates: Partial<Attachment>) => {
+    setForm({
+      ...form,
+      attachments: (form.attachments || []).map(a => a.id === attId ? { ...a, ...updates } : a)
+    });
+  };
+
+  const removeAttachment = (attId: string) => {
+    setForm({ ...form, attachments: (form.attachments || []).filter(a => a.id !== attId) });
+  };
+
+  const handleSubmit = () => {
+    if(!form.title) return alert('タイトル必須');
+    onSave({...form, id: form.id || `p_${Date.now()}`});
+    navigate('/procedures');
+  };
+
+  return (
+    <div className="p-4 space-y-6 pb-32 animate-in slide-in-from-bottom-5">
+      <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*,application/pdf" />
+
+      <div className="flex items-center justify-between">
+        <button onClick={() => navigate(-1)} className="p-2 bg-white rounded-xl shadow-sm"><X size={20} /></button>
+        <h2 className="text-lg font-black text-slate-800">{isNew ? '新規作成' : '編集'}</h2>
+        <button onClick={handleSubmit} className="p-2 bg-teal-600 text-white rounded-xl shadow-md"><Save size={20} /></button>
+      </div>
+
+      <div className="space-y-6">
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-400 uppercase px-1">基本情報</label>
+            <input value={form.title} onChange={e => setForm({...form, title: e.target.value})} placeholder="手順タイトル" className="w-full p-4 bg-white border border-slate-100 rounded-2xl font-bold outline-none" />
+            <input value={form.category} onChange={e => setForm({...form, category: e.target.value})} placeholder="カテゴリ" className="w-full p-4 bg-white border border-slate-100 rounded-2xl font-bold outline-none" />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase px-1">ステップ</label>
+            {form.steps?.map((step, i) => (
+              <div key={i} className="flex gap-2">
+                <textarea value={step} onChange={e => { const s = [...form.steps!]; s[i] = e.target.value; setForm({...form, steps: s}); }} placeholder={`ステップ ${i+1}`} className="w-full p-4 bg-white border border-slate-100 rounded-2xl font-bold text-sm min-h-[60px] resize-none" />
+                <button onClick={() => setForm({...form, steps: form.steps!.filter((_, idx) => idx !== i)})} className="p-2 text-slate-200 hover:text-red-500"><Trash2 size={16}/></button>
+              </div>
+            ))}
+            <button onClick={() => setForm({...form, steps: [...form.steps!, '']})} className="w-full py-3 border-2 border-dashed border-slate-100 rounded-2xl text-[10px] font-black text-teal-600 uppercase tracking-widest hover:bg-white">+ ステップを追加</button>
+          </div>
+
+          <div className="space-y-3">
+            <label className="text-[10px] font-black text-slate-400 uppercase px-1">関連資料 (写真・PDF・動画)</label>
+            
+            <div className="space-y-3">
+              {(form.attachments || []).map((att) => (
+                <div key={att.id} className="p-5 bg-white rounded-[28px] border border-slate-100 shadow-sm space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase ${
+                        att.type === 'video' ? 'bg-amber-100 text-amber-600' :
+                        att.type === 'image' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
+                      }`}>{att.type}</span>
+                      {att.url && <CheckCircle2 size={12} className="text-emerald-500" />}
+                    </div>
+                    <button onClick={() => removeAttachment(att.id)} className="text-slate-200 hover:text-red-500"><Trash2 size={14}/></button>
+                  </div>
+
+                  <div className="space-y-3">
+                    <input value={att.name} onChange={e => updateAttachment(att.id, { name: e.target.value })} placeholder="表示名（例：滅菌器の設定画面）" className="w-full p-3 bg-slate-50 rounded-xl text-xs font-bold outline-none" />
+                    
+                    <div className="flex gap-2">
+                      <input value={att.url} onChange={e => updateAttachment(att.id, { url: e.target.value })} placeholder={att.type === 'video' ? "YouTube URLを入力" : "またはURLを入力"} className="flex-1 p-3 bg-slate-50 rounded-xl text-[10px] font-bold outline-none font-mono truncate" />
+                      
+                      {att.type !== 'video' && (
+                        <button 
+                          onClick={() => triggerFileUpload(att.id)} 
+                          disabled={isReadingFile === att.id}
+                          className="px-4 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center disabled:opacity-50"
+                        >
+                          {isReadingFile === att.id ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={18} />}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {att.url && att.type === 'image' && (
+                    <div className="relative aspect-video w-full rounded-xl overflow-hidden border border-slate-50 bg-slate-50">
+                      <img src={att.url} className="w-full h-full object-cover" alt="preview" />
+                    </div>
+                  )}
+                  {att.url && att.type === 'pdf' && (
+                    <div className="p-3 bg-blue-50 rounded-xl flex items-center gap-2 text-blue-600 text-[10px] font-black">
+                      <FileText size={14} /> PDFファイルが選択されています
+                    </div>
+                  )}
+                </div>
+              ))}
+              
+              <div className="grid grid-cols-3 gap-2">
+                <button onClick={() => addAttachment('image')} className="flex flex-col items-center gap-1 p-4 bg-white border border-slate-100 rounded-2xl text-slate-400 hover:text-teal-600 active:scale-95 transition-all">
+                  <ImageIcon size={20} />
+                  <span className="text-[8px] font-black uppercase">Add Photo</span>
+                </button>
+                <button onClick={() => addAttachment('pdf')} className="flex flex-col items-center gap-1 p-4 bg-white border border-slate-100 rounded-2xl text-slate-400 hover:text-teal-600 active:scale-95 transition-all">
+                  <FileUp size={20} />
+                  <span className="text-[8px] font-black uppercase">Add PDF</span>
+                </button>
+                <button onClick={() => addAttachment('video')} className="flex flex-col items-center gap-1 p-4 bg-white border border-slate-100 rounded-2xl text-slate-400 hover:text-teal-600 active:scale-95 transition-all">
+                  <PlayCircle size={20} />
+                  <span className="text-[8px] font-black uppercase">YouTube</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Remainders ---
 
 const QAPage: React.FC<any> = ({ qaList, user, onSave, onDelete }) => {
   const navigate = useNavigate();
@@ -473,7 +701,7 @@ const QAPage: React.FC<any> = ({ qaList, user, onSave, onDelete }) => {
 
       {editingQA && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] p-4 flex items-center justify-center">
-          <div className="bg-white w-full max-sm rounded-[40px] p-8 space-y-4 animate-in zoom-in-95">
+          <div className="bg-white w-full max-w-sm rounded-[40px] p-8 space-y-4 animate-in zoom-in-95">
             <div className="flex items-center gap-2 mb-2">
               <div className="p-2 bg-amber-50 text-amber-600 rounded-xl"><Lightbulb size={20} /></div>
               <h3 className="font-black text-lg text-slate-800">ナレッジを共有</h3>
@@ -526,13 +754,9 @@ const SkillMapPage: React.FC<any> = ({ user, skills, allProgress, allUsers, onUp
     const newSkills = [...skills];
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
     if (targetIndex < 0 || targetIndex >= skills.length) return;
-    
-    // 入れ替え
     const temp = newSkills[index];
     newSkills[index] = newSkills[targetIndex];
     newSkills[targetIndex] = temp;
-    
-    // クラウド保存
     onSaveMaster('skills', newSkills);
   };
 
@@ -568,7 +792,6 @@ const SkillMapPage: React.FC<any> = ({ user, skills, allProgress, allUsers, onUp
                 <div className="flex gap-1 items-center">
                   {isManagingMaster ? (
                     <div className="flex gap-1 items-center">
-                       {/* 並び替えボタン */}
                        <div className="flex flex-col gap-1 mr-2 border-r border-slate-100 pr-2">
                           {index > 0 && (
                             <button onClick={() => moveSkill(index, 'up')} className="p-1 text-teal-500 bg-teal-50 rounded-md hover:bg-teal-100"><ArrowUp size={12} /></button>
@@ -667,7 +890,7 @@ const ProfilePage: React.FC<{ user: User; allUsers: User[]; onDeleteUser: (id: s
        </div>
        <div className="flex justify-between items-center">
           <span className="text-[10px] font-black text-slate-400 uppercase">Version</span>
-          <span className="text-xs font-black text-teal-600">v1.8.0 Reordering Skills</span>
+          <span className="text-xs font-black text-teal-600">v2.0.0 Direct File Upload</span>
        </div>
     </div>
 
@@ -705,38 +928,6 @@ const ProfilePage: React.FC<{ user: User; allUsers: User[]; onDeleteUser: (id: s
     <button onClick={onLogout} className="w-full py-5 bg-red-50 text-red-500 rounded-[28px] font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-all">ログアウトして終了</button>
   </div>
 );
-
-const ProcedureEditPage: React.FC<any> = ({ procedures, onSave }) => {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const isNew = !id;
-  const existing = procedures.find((p: Procedure) => p.id === id);
-  const [form, setForm] = useState<Partial<Procedure>>(existing || { title: '', category: '基本準備', steps: [''], tips: '', videoUrl: '' });
-
-  const handleSubmit = () => {
-    if(!form.title) return alert('タイトル必須');
-    onSave({...form, id: form.id || `p_${Date.now()}`});
-    navigate('/procedures');
-  };
-
-  return (
-    <div className="p-4 space-y-6 pb-32 animate-in slide-in-from-bottom-5">
-      <div className="flex items-center justify-between">
-        <button onClick={() => navigate(-1)} className="p-2 bg-white rounded-xl shadow-sm"><X size={20} /></button>
-        <h2 className="text-lg font-black text-slate-800">{isNew ? '新規作成' : '編集'}</h2>
-        <button onClick={handleSubmit} className="p-2 bg-teal-600 text-white rounded-xl shadow-md"><Save size={20} /></button>
-      </div>
-      <div className="space-y-4">
-        <input value={form.title} onChange={e => setForm({...form, title: e.target.value})} placeholder="手順タイトル" className="w-full p-4 bg-white border border-slate-100 rounded-2xl font-bold outline-none" />
-        <input value={form.category} onChange={e => setForm({...form, category: e.target.value})} placeholder="カテゴリ" className="w-full p-4 bg-white border border-slate-100 rounded-2xl font-bold outline-none" />
-        {form.steps?.map((step, i) => (
-           <textarea key={i} value={step} onChange={e => { const s = [...form.steps!]; s[i] = e.target.value; setForm({...form, steps: s}); }} placeholder={`ステップ ${i+1}`} className="w-full p-4 bg-white border border-slate-100 rounded-2xl font-bold text-sm min-h-[60px]" />
-        ))}
-        <button onClick={() => setForm({...form, steps: [...form.steps!, '']})} className="text-xs font-black text-teal-600 uppercase">+ ステップを追加</button>
-      </div>
-    </div>
-  );
-};
 
 const LoginPage: React.FC<any> = ({ users, onLogin, onCreateUser }) => {
   const [mode, setMode] = useState<'select' | 'auth' | 'create'>('select');
@@ -817,8 +1008,6 @@ const LoginPage: React.FC<any> = ({ users, onLogin, onCreateUser }) => {
   );
 };
 
-// --- App Root ---
-
 const AppContent: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -866,7 +1055,6 @@ const AppContent: React.FC = () => {
     return () => unsubClinic();
   }, [user?.clinicId]);
 
-  // 個別メモ同期（日付ベースのオブジェクト）
   useEffect(() => {
     if (!user) return;
     const unsubMemo = onSnapshot(doc(db, 'memos', user.id), snap => {

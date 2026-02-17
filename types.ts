@@ -19,12 +19,19 @@ export const SkillLevelLabels = {
   [SkillLevel.INDEPENDENT]: '単独'
 };
 
+export interface Attachment {
+  id: string;
+  type: 'video' | 'image' | 'pdf';
+  url: string;
+  name: string;
+}
+
 export interface User {
   id: string;
   name: string;
   role: UserRole;
   clinicId: string;
-  password?: string; // パスワードフィールド
+  password?: string;
 }
 
 export interface Procedure {
@@ -33,7 +40,8 @@ export interface Procedure {
   category: string;
   steps: string[];
   tips?: string;
-  videoUrl?: string;
+  videoUrl?: string; // 互換性のために残すが、基本はattachmentsを使用
+  attachments?: Attachment[];
 }
 
 export interface Skill {

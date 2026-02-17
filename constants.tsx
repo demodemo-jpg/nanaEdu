@@ -14,7 +14,11 @@ export const MOCK_PROCEDURES: Procedure[] = [
       '対診用パントモ写真の表示'
     ],
     tips: 'チップは摩耗していないか、使用前に必ずチェックしてください。',
-    videoUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ' // サンプル動画
+    attachments: [
+      { id: 'a1', type: 'video', name: 'スケーラー準備の手順動画', url: 'https://www.youtube.com/embed/dQw4w9WgXcQ' },
+      { id: 'a2', type: 'image', name: 'チップのチェック基準', url: 'https://images.unsplash.com/photo-1606811971618-4486d14f3f99?auto=format&fit=crop&q=80&w=400' },
+      { id: 'a3', type: 'pdf', name: 'メーカー提供：保守点検ガイド', url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf' }
+    ]
   },
   {
     id: 'p2',
@@ -27,7 +31,10 @@ export const MOCK_PROCEDURES: Procedure[] = [
       '口腔内挿入・保持',
       '撤去・水洗・消毒'
     ],
-    tips: '嘔吐反射がある患者様には、上顎の際は前屈みになってもらうと楽です。'
+    tips: '嘔吐反射がある患者様には、上顎の際は前屈みになってもらうと楽です。',
+    attachments: [
+      { id: 'a4', type: 'image', name: '理想的な練和状態', url: 'https://images.unsplash.com/photo-1598256989800-fe5f95da9787?auto=format&fit=crop&q=80&w=400' }
+    ]
   }
 ];
 
