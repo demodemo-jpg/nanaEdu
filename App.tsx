@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { HashRouter as Router, Routes, Route, Link, useNavigate, useLocation, useParams, Navigate } from 'react-router-dom';
 import { 
   ClipboardList, 
@@ -35,10 +35,32 @@ import {
   Eye,
   EyeOff,
   UserPlus,
-  Video
+  Video,
+  CloudOff,
+  CloudRain,
+  RefreshCw,
+  CheckCircle2
 } from 'lucide-react';
 import { UserRole, SkillLevel, SkillLevelLabels, UserSkillProgress, QA, Procedure, Skill, User } from './types';
 import { MOCK_PROCEDURES, MOCK_SKILLS, MOCK_QA } from './constants';
+
+// --- Constants ---
+const DEFAULT_CLINIC_NAME = "なないろ歯科";
+const APP_STORAGE_KEYS = {
+  USERS: 'dh_path_all_users',
+  LOGGED_USER: 'dh_path_logged_user',
+  CLINIC_NAME: 'dh_path_clinic_name',
+  QA: 'dh_path_qa_list',
+  PROCEDURES: 'dh_path_procedures',
+  PROGRESS: 'dh_path_all_skill_progress',
+  MEMOS: 'dh_path_all_memos'
+};
+
+const INITIAL_USERS: User[] = [
+  { id: 'u1', name: '田中 里奈', role: UserRole.NEWBIE, clinicId: 'c1', password: '1234' },
+  { id: 'u3', name: '佐藤 結衣', role: UserRole.NEWBIE, clinicId: 'c1', password: '1234' },
+  { id: 'u2', name: '鈴木 院長', role: UserRole.MENTOR, clinicId: 'c1', password: '1234' },
+];
 
 // --- Rank Definition ---
 const PROGRESS_RANKS = [
@@ -52,14 +74,6 @@ const PROGRESS_RANKS = [
 const getRankInfo = (progress: number) => {
   return [...PROGRESS_RANKS].reverse().find(r => progress >= r.min) || PROGRESS_RANKS[0];
 };
-
-// --- Initial Data ---
-const DEFAULT_CLINIC_NAME = "なないろ歯科";
-const INITIAL_USERS: User[] = [
-  { id: 'u1', name: '田中 里奈', role: UserRole.NEWBIE, clinicId: 'c1', password: '1234' },
-  { id: 'u3', name: '佐藤 結衣', role: UserRole.NEWBIE, clinicId: 'c1', password: '1234' },
-  { id: 'u2', name: '鈴木 院長', role: UserRole.MENTOR, clinicId: 'c1', password: '1234' },
-];
 
 // --- Helpers ---
 const formatEmbedUrl = (url: string) => {
@@ -78,16 +92,19 @@ const formatEmbedUrl = (url: string) => {
 
 // --- Components ---
 
-const Header: React.FC<{ title: string; user: User | null; clinicName: string }> = ({ title, user, clinicName }) => (
+const Header: React.FC<{ title: string; user: User | null; clinicName: string; isSyncing?: boolean }> = ({ title, user, clinicName, isSyncing }) => (
   <header className="sticky top-0 z-50 bg-white border-b border-slate-200 px-4 py-3 flex justify-between items-center shadow-sm">
-    <div>
-      <h1 className="text-xl font-bold text-teal-600">なないろアプリ</h1>
-      <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">{clinicName}</p>
+    <div className="flex flex-col">
+      <div className="flex items-center gap-1.5">
+        <h1 className="text-lg font-black text-teal-600 leading-none">なないろ</h1>
+        <div className={`w-1.5 h-1.5 rounded-full ${isSyncing ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]'}`}></div>
+      </div>
+      <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mt-0.5">{clinicName}</p>
     </div>
     {user && (
       <div className="flex items-center gap-2">
-        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${
-          user.role === UserRole.MENTOR ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-teal-100 text-teal-700 border border-teal-200'
+        <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest border ${
+          user.role === UserRole.MENTOR ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-teal-50 text-teal-600 border-teal-100'
         }`}>
           {user.role === UserRole.MENTOR ? 'Mentor' : 'Staff'}
         </span>
@@ -101,7 +118,7 @@ const Navigation: React.FC = () => {
   const isActive = (path: string) => location.pathname === path || (path !== '/' && location.pathname.startsWith(path));
   
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around safe-area-bottom z-50 px-2 shadow-[0_-4px_20px_rgba(0,0,0,0.03)]">
+    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 flex justify-around safe-area-bottom z-50 px-2 shadow-[0_-10px_30px_rgba(0,0,0,0.04)]">
       <NavItem to="/" icon={<TrendingUp size={20} />} label="ホーム" active={location.pathname === '/'} />
       <NavItem to="/procedures" icon={<ClipboardList size={20} />} label="手順" active={isActive('/procedures')} />
       <NavItem to="/skills" icon={<MapIcon size={20} />} label="スキル" active={isActive('/skills')} />
@@ -112,9 +129,9 @@ const Navigation: React.FC = () => {
 };
 
 const NavItem: React.FC<{ to: string; icon: React.ReactNode; label: string; active: boolean }> = ({ to, icon, label, active }) => (
-  <Link to={to} className={`flex flex-col items-center justify-center py-2 px-1 flex-1 transition-all ${active ? 'text-teal-600 scale-110' : 'text-slate-400'}`}>
+  <Link to={to} className={`flex flex-col items-center justify-center py-2 px-1 flex-1 transition-all ${active ? 'text-teal-600 scale-105' : 'text-slate-300'}`}>
     {icon}
-    <span className="text-[9px] mt-1 font-bold">{label}</span>
+    <span className="text-[9px] mt-1 font-black">{label}</span>
   </Link>
 );
 
@@ -152,86 +169,92 @@ const LoginPage: React.FC<{ users: User[]; onLogin: (user: User) => void; clinic
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-b from-teal-50 to-white">
-      <div className="w-full max-w-sm space-y-8 text-center animate-in fade-in duration-500">
-        <div className="space-y-2">
-          <div className="w-20 h-20 bg-teal-600 rounded-3xl mx-auto flex items-center justify-center shadow-xl shadow-teal-200 rotate-3">
-            <ClipboardList size={40} className="text-white -rotate-3" />
+    <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
+      <div className="w-full max-sm:px-4 max-w-sm space-y-10 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="space-y-4">
+          <div className="w-24 h-24 bg-teal-600 rounded-[32px] mx-auto flex items-center justify-center shadow-2xl shadow-teal-200/50 rotate-3 transition-transform hover:rotate-0 duration-300">
+            <ClipboardList size={48} className="text-white -rotate-3" />
           </div>
-          <h1 className="text-3xl font-black text-slate-800 tracking-tight">なないろアプリ</h1>
-          <p className="text-slate-500 text-sm">{clinicName} 教育支援システム</p>
+          <div>
+            <h1 className="text-4xl font-black text-slate-800 tracking-tighter">なないろアプリ</h1>
+            <p className="text-slate-400 text-xs font-black uppercase tracking-widest mt-2">{clinicName}</p>
+          </div>
         </div>
 
         {!selectedUser ? (
-          <div className="bg-white p-6 rounded-3xl shadow-xl shadow-slate-200 border border-slate-100 space-y-4">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">ログインするユーザーを選択</p>
-            <div className="space-y-3 max-h-[300px] overflow-y-auto no-scrollbar">
+          <div className="bg-white p-8 rounded-[40px] shadow-xl shadow-slate-200/50 border border-slate-100 space-y-6">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">ログインユーザーを選択</p>
+            <div className="space-y-3 max-h-[350px] overflow-y-auto no-scrollbar pr-1">
               {users.map(u => (
                 <button 
                   key={u.id}
                   onClick={() => handleUserSelect(u)}
-                  className={`w-full group flex items-center justify-between p-4 rounded-2xl transition-all active:scale-95 border-2 ${
+                  className={`w-full group flex items-center justify-between p-4 rounded-3xl transition-all active:scale-95 border-2 ${
                     u.role === UserRole.MENTOR 
-                      ? 'bg-amber-50 border-amber-100 hover:border-amber-200 text-amber-900' 
-                      : 'bg-teal-50 border-teal-100 hover:border-teal-200 text-teal-900'
+                      ? 'bg-amber-50 border-amber-50 hover:border-amber-100 text-amber-900' 
+                      : 'bg-teal-50 border-teal-50 hover:border-teal-100 text-teal-900'
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${u.role === UserRole.MENTOR ? 'bg-amber-200 text-amber-700' : 'bg-teal-200 text-teal-700'}`}>
-                      {u.role === UserRole.MENTOR ? <ShieldCheck size={20} /> : <UserIcon size={20} />}
+                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shadow-sm ${u.role === UserRole.MENTOR ? 'bg-amber-100 text-amber-600' : 'bg-teal-100 text-teal-600'}`}>
+                      {u.role === UserRole.MENTOR ? <ShieldCheck size={22} /> : <UserIcon size={22} />}
                     </div>
                     <div className="text-left">
-                      <p className="font-bold text-sm">{u.name}</p>
-                      <p className="text-[10px] opacity-60 font-bold uppercase">{u.role === UserRole.MENTOR ? '教育係・院長' : '新人スタッフ'}</p>
+                      <p className="font-black text-sm">{u.name}</p>
+                      <p className="text-[9px] opacity-50 font-black uppercase tracking-tighter">{u.role === UserRole.MENTOR ? '教育係・管理者' : '新人スタッフ'}</p>
                     </div>
                   </div>
-                  <ChevronRight size={18} className="opacity-30 group-hover:translate-x-1 transition-transform" />
+                  <ChevronRight size={18} className="opacity-20 group-hover:translate-x-1 group-hover:opacity-50 transition-all" />
                 </button>
               ))}
             </div>
           </div>
         ) : (
-          <form onSubmit={handleLoginSubmit} className="bg-white p-8 rounded-3xl shadow-xl shadow-slate-200 border border-slate-100 space-y-6 animate-in slide-in-from-bottom-4 duration-300">
-            <button type="button" onClick={() => setSelectedUser(null)} className="flex items-center gap-2 text-slate-400 text-xs font-bold hover:text-teal-600 transition-colors">
-              <ArrowLeft size={14} /> ユーザー選択に戻る
+          <form onSubmit={handleLoginSubmit} className="bg-white p-10 rounded-[48px] shadow-2xl shadow-slate-200 border border-slate-100 space-y-8 animate-in zoom-in-95 duration-300">
+            <button type="button" onClick={() => setSelectedUser(null)} className="flex items-center gap-2 text-slate-300 text-[10px] font-black hover:text-teal-600 transition-colors uppercase tracking-widest">
+              <ArrowLeft size={14} /> 選択に戻る
             </button>
-            <div className="flex flex-col items-center gap-2">
-              <div className={`w-16 h-16 rounded-2xl flex items-center justify-center ${selectedUser.role === UserRole.MENTOR ? 'bg-amber-100 text-amber-700' : 'bg-teal-100 text-teal-700'}`}>
-                <UserIcon size={32} />
+            <div className="flex flex-col items-center gap-3">
+              <div className={`w-20 h-20 rounded-[30px] flex items-center justify-center shadow-inner ${selectedUser.role === UserRole.MENTOR ? 'bg-amber-50 text-amber-500' : 'bg-teal-50 text-teal-500'}`}>
+                <UserIcon size={40} />
               </div>
-              <h2 className="text-xl font-black text-slate-800">{selectedUser.name}</h2>
-              <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">{selectedUser.role === UserRole.MENTOR ? 'Mentor' : 'Staff'}</p>
+              <div className="text-center">
+                <h2 className="text-2xl font-black text-slate-800">{selectedUser.name}</h2>
+                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">{selectedUser.role}</p>
+              </div>
             </div>
 
-            <div className="space-y-4">
-              <div className="relative">
-                <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <div className="space-y-5">
+              <div className="relative group">
+                <KeyRound className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-teal-500 transition-colors" size={20} />
                 <input 
                   autoFocus
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="パスワードを入力"
+                  placeholder="パスワード"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className={`w-full pl-12 pr-12 py-4 bg-slate-50 border rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-teal-500 transition-all ${error ? 'border-red-300 ring-red-100' : 'border-slate-100'}`}
+                  className={`w-full pl-14 pr-14 py-5 bg-slate-50 border-2 rounded-3xl text-sm font-black outline-none transition-all ${error ? 'border-red-100 ring-4 ring-red-50' : 'border-slate-50 focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-50'}`}
                 />
                 <button 
                   type="button" 
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors"
                 >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
-              {error && <p className="text-red-500 text-[10px] font-black">{error}</p>}
+              {error && <p className="text-red-500 text-[10px] font-black animate-bounce">{error}</p>}
               <button 
                 type="submit"
-                className="w-full py-4 bg-teal-600 text-white rounded-2xl font-black shadow-lg shadow-teal-100 active:scale-[0.98] transition-all"
+                className="w-full py-5 bg-teal-600 text-white rounded-[24px] font-black text-base shadow-xl shadow-teal-100 hover:bg-teal-700 active:scale-[0.98] transition-all"
               >
                 ログイン
               </button>
             </div>
           </form>
         )}
+        
+        <p className="text-[10px] text-slate-300 font-black uppercase tracking-widest pt-4">© 2025 Nanairo App Cloud</p>
       </div>
     </div>
   );
@@ -246,7 +269,8 @@ const DashboardPage: React.FC<{
   clinicName: string;
   memo: string;
   onSaveMemo: (memo: string) => void;
-}> = ({ user, procedures, allProgress, skills, allUsers, clinicName, memo, onSaveMemo }) => {
+  isSaving?: boolean;
+}> = ({ user, procedures, allProgress, skills, allUsers, clinicName, memo, onSaveMemo, isSaving }) => {
   const navigate = useNavigate();
   const [tempMemo, setTempMemo] = useState(memo);
 
@@ -263,35 +287,42 @@ const DashboardPage: React.FC<{
   const myRank = getRankInfo(myProgress);
 
   return (
-    <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-300">
+    <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-500">
       <section>
-        <div className="bg-gradient-to-br from-teal-600 to-emerald-700 rounded-3xl p-6 text-white shadow-lg relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-4 opacity-10">
-            <Sparkles size={120} />
+        <div className="bg-gradient-to-br from-teal-600 via-teal-700 to-emerald-800 rounded-[40px] p-8 text-white shadow-2xl shadow-teal-200/50 relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+            <Sparkles size={180} />
           </div>
           <div className="relative z-10">
-            <h2 className="text-xl font-black mb-1">こんにちは、{user.name}さん</h2>
-            <p className="text-xs opacity-80 font-medium">{user.role === UserRole.MENTOR ? '管理者・教育係' : '新人DH'} / {clinicName}</p>
+            <div className="flex justify-between items-start">
+               <div>
+                <h2 className="text-2xl font-black mb-1 leading-none">こんにちは、{user.name}さん</h2>
+                <p className="text-[10px] opacity-70 font-black uppercase tracking-widest">{clinicName} / {user.role === UserRole.MENTOR ? '管理者' : 'スタッフ'}</p>
+               </div>
+               <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center backdrop-blur-md border border-white/20">
+                 {user.role === UserRole.MENTOR ? <ShieldCheck size={24} /> : <UserIcon size={24} />}
+               </div>
+            </div>
             
             {user.role === UserRole.NEWBIE && (
-              <div className="mt-6">
-                <div className="flex justify-between items-end mb-2">
+              <div className="mt-8 space-y-4">
+                <div className="flex justify-between items-end">
                   <div className="flex flex-col">
-                    <span className="text-[10px] font-black uppercase tracking-tighter opacity-80 mb-1">現在の階級</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest opacity-60 mb-1">現在のグレード</span>
                     <div className="flex items-center gap-2">
-                      <div className={`p-1 rounded-lg ${myRank.color} bg-white/20`}>
+                      <div className={`p-1.5 rounded-xl ${myRank.color} bg-white/20 shadow-inner`}>
                         {myRank.icon}
                       </div>
-                      <span className="text-xl font-black tracking-tight">{myRank.label}</span>
+                      <span className="text-2xl font-black tracking-tight">{myRank.label}</span>
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="text-[10px] font-black uppercase tracking-tighter opacity-80 block">達成度</span>
-                    <span className="text-2xl font-black">{myProgress}%</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest opacity-60 block mb-1">スキル達成度</span>
+                    <span className="text-4xl font-black tabular-nums">{myProgress}<span className="text-sm opacity-60 ml-0.5">%</span></span>
                   </div>
                 </div>
-                <div className="w-full h-2.5 bg-white/20 rounded-full overflow-hidden mt-2 border border-white/10">
-                  <div className="h-full bg-white transition-all duration-1000" style={{ width: `${myProgress}%` }} />
+                <div className="w-full h-3 bg-black/10 rounded-full overflow-hidden border border-white/10 p-0.5 shadow-inner">
+                  <div className="h-full bg-white rounded-full transition-all duration-1000 shadow-[0_0_12px_rgba(255,255,255,0.4)]" style={{ width: `${myProgress}%` }} />
                 </div>
               </div>
             )}
@@ -301,29 +332,38 @@ const DashboardPage: React.FC<{
 
       {user.role === UserRole.MENTOR && (
         <section className="space-y-4">
-          <div className="flex items-center justify-between px-1">
-            <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
-              <UsersIcon size={18} className="text-teal-600" /> スタッフ進捗
+          <div className="flex items-center justify-between px-2">
+            <h3 className="text-[11px] font-black text-slate-400 flex items-center gap-2 uppercase tracking-widest">
+              <UsersIcon size={14} className="text-teal-600" /> スタッフ進捗状況
             </h3>
-            <button onClick={() => navigate('/skills')} className="text-[10px] font-bold text-teal-600">
-              すべて表示
+            <button onClick={() => navigate('/skills')} className="text-[10px] font-black text-teal-600 bg-teal-50 px-3 py-1 rounded-full border border-teal-100">
+              一覧
             </button>
           </div>
-          <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 no-scrollbar">
+          <div className="flex gap-4 overflow-x-auto pb-4 -mx-1 px-1 no-scrollbar">
             {newbieStats.map(staff => {
               const rank = getRankInfo(staff.progress);
               return (
                 <button 
                   key={staff.id}
                   onClick={() => navigate(`/skills/${staff.id}`)}
-                  className="min-w-[140px] bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center text-center active:scale-95 transition-all"
+                  className="min-w-[160px] bg-white p-5 rounded-[32px] border border-slate-100 shadow-sm flex flex-col items-center text-center active:scale-95 hover:border-teal-200 transition-all group"
                 >
-                  <div className="w-10 h-10 bg-teal-50 rounded-xl flex items-center justify-center text-teal-600 font-black text-xs mb-2 border border-teal-100">
+                  <div className="w-14 h-14 bg-slate-50 rounded-[22px] flex items-center justify-center text-teal-600 font-black text-xl mb-3 shadow-inner group-hover:bg-teal-600 group-hover:text-white transition-all">
                     {staff.name.charAt(0)}
                   </div>
-                  <p className="font-bold text-slate-800 text-xs truncate w-full">{staff.name}</p>
-                  <div className={`mt-2 px-2 py-0.5 rounded-full text-[8px] font-black text-white ${rank.color}`}>
+                  <p className="font-black text-slate-800 text-sm truncate w-full">{staff.name}</p>
+                  <div className={`mt-2 px-3 py-1 rounded-full text-[9px] font-black text-white ${rank.color} shadow-sm`}>
                     {rank.label}
+                  </div>
+                  <div className="mt-3 w-full space-y-1">
+                    <div className="flex justify-between text-[8px] font-black text-slate-300">
+                       <span>PROGRESS</span>
+                       <span>{staff.progress}%</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-50 rounded-full overflow-hidden">
+                       <div className="h-full bg-teal-500" style={{ width: `${staff.progress}%` }}></div>
+                    </div>
                   </div>
                 </button>
               );
@@ -332,46 +372,50 @@ const DashboardPage: React.FC<{
         </section>
       )}
 
-      <section className="grid grid-cols-2 gap-3">
+      <section className="grid grid-cols-2 gap-4">
         <div 
           onClick={() => navigate('/procedures')}
-          className="bg-white p-5 rounded-3xl border border-slate-200 flex flex-col items-center text-center cursor-pointer active:scale-95 transition-all shadow-sm"
+          className="bg-white p-6 rounded-[36px] border border-slate-100 flex flex-col items-center text-center cursor-pointer active:scale-95 hover:border-blue-100 transition-all shadow-sm"
         >
-          <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 mb-3">
-            <BookOpen size={24} />
+          <div className="w-16 h-16 bg-blue-50 rounded-[24px] flex items-center justify-center text-blue-600 mb-4 shadow-inner">
+            <BookOpen size={30} />
           </div>
-          <span className="text-sm font-bold">手順書</span>
-          <span className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-widest">{procedures.length} 件</span>
+          <span className="text-sm font-black text-slate-800">手順書マニュアル</span>
+          <span className="text-[10px] text-slate-400 font-black mt-2 uppercase tracking-[0.2em]">{procedures.length} DOCUMENTS</span>
         </div>
         <div 
           onClick={() => navigate('/qa')}
-          className="bg-white p-5 rounded-3xl border border-slate-200 flex flex-col items-center text-center cursor-pointer active:scale-95 transition-all shadow-sm"
+          className="bg-white p-6 rounded-[36px] border border-slate-100 flex flex-col items-center text-center cursor-pointer active:scale-95 hover:border-amber-100 transition-all shadow-sm"
         >
-          <div className="w-12 h-12 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-600 mb-3">
-            <MessageSquare size={24} />
+          <div className="w-16 h-16 bg-amber-50 rounded-[24px] flex items-center justify-center text-amber-600 mb-4 shadow-inner">
+            <MessageSquare size={30} />
           </div>
-          <span className="text-sm font-bold">Q&A</span>
-          <span className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-widest">知識共有</span>
+          <span className="text-sm font-black text-slate-800">院内ナレッジ</span>
+          <span className="text-[10px] text-slate-400 font-black mt-2 uppercase tracking-[0.2em]">Q&A ARCHIVE</span>
         </div>
       </section>
 
-      <section className="space-y-3">
-        <h3 className="text-sm font-black text-slate-800 flex items-center gap-2 px-1">
-          <StickyNote size={18} className="text-teal-600" /> 自分用メモ
+      <section className="space-y-4">
+        <h3 className="text-[11px] font-black text-slate-400 flex items-center justify-between px-2 uppercase tracking-widest">
+          <div className="flex items-center gap-2">
+            <StickyNote size={14} className="text-teal-600" /> 学習メモ
+          </div>
+          {isSaving && <div className="flex items-center gap-1 text-teal-600 animate-pulse"><RefreshCw size={10} className="animate-spin" /> 保存中</div>}
         </h3>
-        <div className="bg-amber-50 rounded-3xl p-5 border border-amber-100 shadow-sm space-y-3">
+        <div className="bg-amber-50 rounded-[32px] p-6 border border-amber-100 shadow-sm space-y-4 group focus-within:ring-4 focus-within:ring-amber-50 transition-all">
           <textarea 
             value={tempMemo}
             onChange={(e) => setTempMemo(e.target.value)}
-            placeholder="今日覚えたことや注意点をメモしましょう..."
-            className="w-full bg-transparent border-none outline-none text-sm text-amber-900 min-h-[120px] font-medium leading-relaxed resize-none"
+            placeholder="今日学んだこと、注意点を自由にメモしましょう。自分だけの秘密のメモです。"
+            className="w-full bg-transparent border-none outline-none text-sm text-amber-950 min-h-[140px] font-bold leading-relaxed resize-none placeholder:text-amber-200"
           />
           <div className="flex justify-end">
             <button 
               onClick={() => onSaveMemo(tempMemo)}
-              className="flex items-center gap-1.5 px-6 py-2.5 bg-amber-200 hover:bg-amber-300 text-amber-800 text-[11px] font-black rounded-full transition-all active:scale-95"
+              className="flex items-center gap-2 px-8 py-3 bg-amber-200 hover:bg-amber-300 text-amber-900 text-[11px] font-black rounded-full transition-all active:scale-95 shadow-sm"
             >
-              <Save size={14} /> 保存する
+              {isSaving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />} 
+              内容を保存する
             </button>
           </div>
         </div>
@@ -380,171 +424,172 @@ const DashboardPage: React.FC<{
   );
 };
 
-const ProceduresPage: React.FC<{ 
-  user: User; 
-  procedures: Procedure[]; 
+// --- Page Implementations ---
+
+/**
+ * ProceduresPage Component
+ * Manages display, search, and editing of clinical procedures.
+ */
+const ProceduresPage: React.FC<{
+  user: User;
+  procedures: Procedure[];
   onSaveProcedure: (proc: Partial<Procedure>) => void;
   onDeleteProcedure: (id: string) => void;
 }> = ({ user, procedures, onSaveProcedure, onDeleteProcedure }) => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isEditing, setIsEditing] = useState<string | null>(null);
-  const [isManaging, setIsManaging] = useState(false);
+  const [search, setSearch] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingProc, setEditingProc] = useState<Partial<Procedure> | null>(null);
 
-  const [editTitle, setEditTitle] = useState('');
-  const [editCategory, setEditCategory] = useState('');
-  const [editSteps, setEditSteps] = useState('');
-  const [editTips, setEditTips] = useState('');
-  const [editVideoUrl, setEditVideoUrl] = useState('');
-
-  const activeProcedure = procedures.find(p => p.id === id);
-  const isMentor = user.role === UserRole.MENTOR;
-
-  const startEdit = (p?: Procedure) => {
-    if (p) {
-      setIsEditing(p.id);
-      setEditTitle(p.title);
-      setEditCategory(p.category);
-      setEditSteps(p.steps.join('\n'));
-      setEditTips(p.tips || '');
-      setEditVideoUrl(p.videoUrl || '');
-    } else {
-      setIsEditing('new');
-      setEditTitle('');
-      setEditCategory('');
-      setEditSteps('');
-      setEditTips('');
-      setEditVideoUrl('');
-    }
-  };
-
-  const handleSave = () => {
-    if (!editTitle || !editCategory) {
-      alert("タイトルとカテゴリは必須です");
-      return;
-    }
-    onSaveProcedure({
-      id: isEditing === 'new' ? undefined : isEditing!,
-      title: editTitle,
-      category: editCategory,
-      steps: editSteps.split('\n').filter(s => s.trim()),
-      tips: editTips,
-      videoUrl: editVideoUrl
-    });
-    setIsEditing(null);
-  };
-
-  const handleDelete = (procId: string, title: string) => {
-    if (confirm(`マニュアル「${title}」を完全に削除しますか？`)) {
-      onDeleteProcedure(procId);
-      if (id === procId) navigate('/procedures');
-    }
-  };
-
-  const filteredProcedures = procedures.filter(p => 
-    p.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    p.category.toLowerCase().includes(searchTerm.toLowerCase())
+  const filtered = procedures.filter(p => 
+    p.title.toLowerCase().includes(search.toLowerCase()) || 
+    p.category.toLowerCase().includes(search.toLowerCase())
   );
 
-  const categories = Array.from(new Set(procedures.map(p => p.category)));
+  const selected = procedures.find(p => p.id === id);
 
-  if (isEditing) {
+  const handleEdit = (p: Procedure) => {
+    setEditingProc(p);
+    setIsEditing(true);
+  };
+
+  const handleAddNew = () => {
+    setEditingProc({ title: '', category: '', steps: [''], tips: '', videoUrl: '' });
+    setIsEditing(true);
+  };
+
+  const save = () => {
+    if (editingProc) {
+      onSaveProcedure(editingProc);
+      setIsEditing(false);
+      setEditingProc(null);
+    }
+  };
+
+  if (isEditing && editingProc) {
     return (
-      <div className="p-4 pb-24">
-        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xl space-y-4">
-          <h3 className="text-lg font-black text-slate-800">{isEditing === 'new' ? '新規マニュアル作成' : 'マニュアル編集'}</h3>
-          <div className="space-y-4">
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">タイトル</label>
-              <input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-teal-500" placeholder="例: スケーリング準備" value={editTitle} onChange={e => setEditTitle(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">カテゴリ</label>
-              <input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-teal-500" placeholder="例: 基本準備" value={editCategory} onChange={e => setEditCategory(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">動画マニュアルURL (YouTube等)</label>
-              <input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-teal-500" placeholder="https://www.youtube.com/watch?v=..." value={editVideoUrl} onChange={e => setEditVideoUrl(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">手順（1行に1ステップ入力）</label>
-              <textarea className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm min-h-[120px] outline-none focus:ring-2 focus:ring-teal-500 font-medium" placeholder="ステップ1\nステップ2..." value={editSteps} onChange={e => setEditSteps(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">コツ・注意点</label>
-              <textarea className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-teal-500 font-medium" placeholder="患者さんの様子を見ながら進める、など" value={editTips} onChange={e => setEditTips(e.target.value)} />
-            </div>
-            <div className="flex gap-2 pt-4">
-              <button onClick={handleSave} className="flex-1 py-4 bg-teal-600 text-white rounded-2xl font-black shadow-lg shadow-teal-100 active:scale-95 transition-all">保存して公開</button>
-              <button onClick={() => setIsEditing(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black active:scale-95 transition-all">キャンセル</button>
-            </div>
+      <div className="p-6 space-y-6 animate-in slide-in-from-right duration-300">
+        <button onClick={() => setIsEditing(false)} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+          <ArrowLeft size={14} /> 編集をキャンセル
+        </button>
+        <div className="space-y-4 bg-white p-6 rounded-[40px] border border-slate-100 shadow-sm">
+          <input 
+            placeholder="タイトル" 
+            value={editingProc.title} 
+            onChange={e => setEditingProc({...editingProc, title: e.target.value})}
+            className="w-full p-4 bg-slate-50 border-none rounded-2xl text-lg font-black outline-none focus:ring-2 focus:ring-teal-500"
+          />
+          <input 
+            placeholder="カテゴリー" 
+            value={editingProc.category} 
+            onChange={e => setEditingProc({...editingProc, category: e.target.value})}
+            className="w-full p-4 bg-slate-50 border-none rounded-2xl text-sm font-black outline-none focus:ring-2 focus:ring-teal-500"
+          />
+          <div className="space-y-2">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">手順ステップ</p>
+            {editingProc.steps?.map((step, idx) => (
+              <div key={idx} className="flex gap-2">
+                <input 
+                  value={step} 
+                  onChange={e => {
+                    const newSteps = [...(editingProc.steps || [])];
+                    newSteps[idx] = e.target.value;
+                    setEditingProc({...editingProc, steps: newSteps});
+                  }}
+                  className="flex-1 p-3 bg-slate-50 border-none rounded-xl text-xs font-bold outline-none"
+                />
+                <button 
+                  onClick={() => {
+                    const newSteps = editingProc.steps?.filter((_, i) => i !== idx);
+                    setEditingProc({...editingProc, steps: newSteps});
+                  }}
+                  className="text-red-400"
+                ><Trash2 size={16} /></button>
+              </div>
+            ))}
+            <button 
+              onClick={() => setEditingProc({...editingProc, steps: [...(editingProc.steps || []), '']})}
+              className="w-full p-3 border-2 border-dashed border-slate-100 rounded-xl text-slate-300 flex items-center justify-center gap-2 hover:border-teal-200 hover:text-teal-400 transition-all"
+            >
+              <Plus size={14} /> 手順を追加
+            </button>
           </div>
+          <textarea 
+            placeholder="アドバイス・注意点" 
+            value={editingProc.tips} 
+            onChange={e => setEditingProc({...editingProc, tips: e.target.value})}
+            className="w-full p-4 bg-amber-50/50 border-none rounded-2xl text-xs font-bold outline-none min-h-[100px]"
+          />
+          <input 
+            placeholder="動画URL (YouTubeなど)" 
+            value={editingProc.videoUrl} 
+            onChange={e => setEditingProc({...editingProc, videoUrl: e.target.value})}
+            className="w-full p-4 bg-slate-50 border-none rounded-2xl text-[10px] font-black outline-none"
+          />
+          <button 
+            onClick={save}
+            className="w-full py-4 bg-teal-600 text-white rounded-2xl font-black text-sm shadow-xl shadow-teal-100"
+          >
+            保存する
+          </button>
         </div>
       </div>
     );
   }
 
-  if (id && activeProcedure) {
-    const embedUrl = formatEmbedUrl(activeProcedure.videoUrl || "");
+  if (selected) {
     return (
-      <div className="p-4 pb-24 animate-in fade-in duration-300">
-        <div className="flex justify-between items-center mb-4 px-1">
-          <button onClick={() => navigate('/procedures')} className="text-teal-600 text-xs font-black flex items-center gap-1 uppercase tracking-widest"><ArrowLeft size={16} /> 戻る</button>
-          {isMentor && (
-            <div className="flex gap-2">
-              <button onClick={() => startEdit(activeProcedure)} className="p-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl shadow-sm hover:text-teal-500 transition-colors"><Edit2 size={16} /></button>
-              <button onClick={() => handleDelete(activeProcedure.id, activeProcedure.title)} className="p-2.5 bg-white text-red-400 border border-slate-200 rounded-xl shadow-sm hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
+      <div className="p-4 space-y-6 pb-24 animate-in slide-in-from-right duration-300">
+        <button onClick={() => navigate('/procedures')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+          <ArrowLeft size={14} /> 一覧に戻る
+        </button>
+        <div className="bg-white rounded-[48px] overflow-hidden shadow-sm border border-slate-100">
+          <div className="p-8 space-y-6">
+            <div className="flex justify-between items-start">
+              <div>
+                <span className="px-3 py-1 bg-teal-50 text-teal-600 text-[9px] font-black rounded-full border border-teal-100 uppercase tracking-widest">{selected.category}</span>
+                <h2 className="text-3xl font-black text-slate-800 mt-2 tracking-tight">{selected.title}</h2>
+              </div>
+              {user.role === UserRole.MENTOR && (
+                <button onClick={() => handleEdit(selected)} className="p-2 bg-slate-50 rounded-xl text-slate-400 hover:text-teal-600 transition-colors">
+                  <Edit2 size={18} />
+                </button>
+              )}
             </div>
-          )}
-        </div>
 
-        <div className="bg-white rounded-[32px] shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
-          {/* Video Section */}
-          {embedUrl && (
-            <div className="bg-slate-900 aspect-video relative">
-              <iframe 
-                className="absolute inset-0 w-full h-full"
-                src={embedUrl}
-                title={activeProcedure.title}
-                frameBorder="0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              ></iframe>
-            </div>
-          )}
+            {selected.videoUrl && (
+              <div className="aspect-video w-full rounded-[32px] overflow-hidden bg-slate-100 shadow-inner group relative">
+                <iframe 
+                  className="w-full h-full border-none"
+                  src={formatEmbedUrl(selected.videoUrl)} 
+                  title={selected.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                  allowFullScreen
+                ></iframe>
+              </div>
+            )}
 
-          <div className="p-6 md:p-8 space-y-8">
-            <header className="space-y-2">
-              <span className="text-[10px] font-black bg-teal-50 text-teal-600 px-3 py-1 rounded-full uppercase tracking-widest inline-block border border-teal-100">{activeProcedure.category}</span>
-              <h2 className="text-2xl font-black text-slate-800 leading-tight">{activeProcedure.title}</h2>
-            </header>
-
-            <div className="space-y-6">
-              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                <ClipboardList size={16} className="text-teal-600" /> 手順
+            <div className="space-y-4">
+              <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                <CheckCircle2 size={14} className="text-teal-600" /> 手順ステップ
               </h3>
-              <div className="space-y-5">
-                {activeProcedure.steps.map((step, idx) => (
-                  <div key={idx} className="flex gap-4 items-start group">
-                    <div className="w-7 h-7 rounded-xl bg-teal-50 border border-teal-100 text-teal-600 flex items-center justify-center text-xs font-black shrink-0 group-hover:bg-teal-600 group-hover:text-white transition-all">
-                      {idx + 1}
-                    </div>
-                    <p className="text-slate-700 font-bold leading-relaxed pt-1">{step}</p>
+              <div className="space-y-3">
+                {selected.steps.map((step, i) => (
+                  <div key={i} className="flex gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100/50">
+                    <span className="w-6 h-6 bg-teal-600 text-white rounded-lg flex items-center justify-center text-[10px] font-black flex-shrink-0">{i + 1}</span>
+                    <p className="text-sm font-bold text-slate-700 leading-relaxed">{step}</p>
                   </div>
                 ))}
               </div>
             </div>
 
-            {activeProcedure.tips && (
-              <div className="p-5 bg-amber-50 rounded-[24px] border border-amber-100 relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-3 opacity-5">
-                  <Sparkles size={48} />
-                </div>
-                <h4 className="text-xs font-black text-amber-700 uppercase mb-3 flex items-center gap-2">
-                  <Sparkles size={14} /> 現場のコツ・注意点
-                </h4>
-                <p className="text-sm text-amber-900 leading-relaxed font-bold whitespace-pre-wrap">{activeProcedure.tips}</p>
+            {selected.tips && (
+              <div className="p-6 bg-amber-50 rounded-[32px] border border-amber-100/50 space-y-2">
+                <h3 className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-2">
+                  <Info size={14} /> ポイント・注意点
+                </h3>
+                <p className="text-sm font-bold text-amber-900/80 leading-relaxed italic">{selected.tips}</p>
               </div>
             )}
           </div>
@@ -554,384 +599,431 @@ const ProceduresPage: React.FC<{
   }
 
   return (
-    <div className="p-4 pb-24 animate-in fade-in duration-300">
-      <div className="flex gap-2 mb-6">
-        <div className="relative flex-1">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <input type="text" placeholder="マニュアルを検索..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl shadow-sm outline-none font-bold focus:ring-2 focus:ring-teal-500 transition-all" />
-        </div>
-        {isMentor && (
-          <div className="flex gap-1">
-            <button onClick={() => setIsManaging(!isManaging)} className={`w-12 h-12 rounded-2xl flex items-center justify-center border transition-all ${isManaging ? 'bg-amber-100 border-amber-300 text-amber-700' : 'bg-white border-slate-200 text-slate-400'}`}><Settings size={20} /></button>
-            <button onClick={() => startEdit()} className="w-12 h-12 bg-teal-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-teal-100 active:scale-95 transition-all"><Plus size={24} /></button>
-          </div>
+    <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-500">
+      <div className="flex justify-between items-center px-2">
+        <h2 className="text-2xl font-black text-slate-800 tracking-tight">手順マニュアル</h2>
+        {user.role === UserRole.MENTOR && (
+          <button onClick={handleAddNew} className="p-3 bg-teal-600 text-white rounded-2xl shadow-lg shadow-teal-100 active:scale-95 transition-all">
+            <Plus size={20} />
+          </button>
         )}
       </div>
 
-      <div className="space-y-10">
-        {categories.length > 0 ? categories.map(cat => (
-          <div key={cat} className="space-y-4">
-            <h3 className="text-[11px] font-black text-slate-400 mb-2 uppercase tracking-widest px-2 flex items-center gap-2">
-              <div className="w-1.5 h-1.5 bg-teal-500 rounded-full" /> {cat}
-            </h3>
-            <div className="grid gap-3">
-              {filteredProcedures.filter(p => p.category === cat).map(proc => (
-                <div key={proc.id} className="flex gap-2 items-center">
-                  <button onClick={() => navigate(`/procedures/${proc.id}`)} className="flex-1 bg-white p-5 rounded-3xl border border-slate-100 flex items-center justify-between shadow-sm active:scale-[0.98] hover:border-teal-100 transition-all group">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${proc.videoUrl ? 'bg-teal-50 text-teal-600' : 'bg-slate-50 text-slate-300'}`}>
-                        {proc.videoUrl ? <Video size={20} /> : <BookOpen size={20} />}
-                      </div>
-                      <span className="font-black text-slate-700">{proc.title}</span>
-                    </div>
-                    {!isManaging && <ChevronRight size={18} className="text-slate-200 group-hover:text-teal-400 group-hover:translate-x-1 transition-all" />}
-                  </button>
-                  {isManaging && <button onClick={() => handleDelete(proc.id, proc.title)} className="w-12 h-12 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center border border-red-100 shadow-sm active:scale-90 hover:bg-red-500 hover:text-white transition-all"><Trash2 size={20} /></button>}
-                </div>
-              ))}
-            </div>
-          </div>
-        )) : (
-          <div className="text-center py-20 space-y-4">
-            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-300">
-              <ClipboardList size={32} />
-            </div>
-            <p className="text-slate-400 text-sm font-bold">マニュアルがまだありません</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-const SkillMapPage: React.FC<{ 
-  user: User; 
-  skills: Skill[]; 
-  allProgress: Record<string, UserSkillProgress[]>; 
-  onUpdateProgress: (userId: string, skillId: string, updates: Partial<UserSkillProgress>) => void; 
-  allUsers: User[]; 
-}> = ({ user, skills, allProgress, onUpdateProgress, allUsers }) => {
-  const { userId: paramUserId } = useParams();
-  const navigate = useNavigate();
-  const isMentor = user.role === UserRole.MENTOR;
-  
-  // スタッフ自身がアクセスした場合は自分のID、教育係が一覧から選んだ場合はそのスタッフのID
-  const targetUserId = paramUserId || (isMentor ? null : user.id);
-  const targetUser = allUsers.find(u => u.id === targetUserId);
-  const progressList = targetUserId ? (allProgress[targetUserId] || []) : [];
-  const categories = Array.from(new Set(skills.map(s => s.category)));
-
-  // 教育係がスタッフ一覧を見ている状態
-  if (isMentor && !paramUserId) {
-    return (
-      <div className="p-4 pb-24 animate-in fade-in duration-300">
-        <h2 className="text-2xl font-black text-slate-800 mb-6 px-1">スタッフ進捗管理</h2>
-        <div className="space-y-4">
-          {allUsers.filter(u => u.role === UserRole.NEWBIE).map(staff => {
-            const prog = calculateProgress(skills, allProgress[staff.id] || []);
-            const rank = getRankInfo(prog);
-            return (
-              <button key={staff.id} onClick={() => navigate(`/skills/${staff.id}`)} className="w-full bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex flex-col active:scale-[0.98] transition-all group hover:border-teal-200">
-                <div className="flex justify-between items-center mb-5">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-teal-50 rounded-2xl flex items-center justify-center text-teal-600 font-black text-lg group-hover:bg-teal-600 group-hover:text-white transition-all">
-                      {staff.name.charAt(0)}
-                    </div>
-                    <div className="text-left">
-                      <p className="font-black text-slate-800 text-base">{staff.name}</p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className={`text-[9px] font-black px-2 py-0.5 rounded-full text-white ${rank.color}`}>{rank.label}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-tighter mb-0.5">達成率</div>
-                    <div className="text-xl font-black text-teal-600">{prog}%</div>
-                  </div>
-                </div>
-                <div className="w-full h-2.5 bg-slate-50 rounded-full overflow-hidden border border-slate-100">
-                  <div className="h-full bg-teal-500 transition-all duration-1000" style={{ width: `${prog}%` }} />
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
-
-  // 個別のスキルマップ表示
-  return (
-    <div className="p-4 pb-24 animate-in fade-in duration-300">
-      <div className="flex items-center gap-4 mb-8 px-1">
-        <div className="w-14 h-14 bg-teal-50 rounded-2xl flex items-center justify-center text-teal-600">
-          <UserIcon size={28} />
-        </div>
-        <div className="flex-1">
-          <div className="flex items-center justify-between">
-             <h2 className="text-xl font-black text-slate-800">{targetUser?.name} さん</h2>
-             {!isMentor && (
-               <div className="flex items-center gap-1 text-[10px] font-black text-amber-500 uppercase bg-amber-50 px-2 py-1 rounded-full border border-amber-100">
-                 <LockKeyhole size={12} /> 評価ロック中
-               </div>
-             )}
-          </div>
-          <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
-            {isMentor ? 'Mentor View' : 'Staff Skill Roadmap'}
-          </p>
-        </div>
+      <div className="relative group mx-2">
+        <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-teal-500 transition-colors" size={18} />
+        <input 
+          placeholder="手順を検索..." 
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-full pl-14 pr-6 py-4 bg-white border border-slate-100 rounded-3xl text-sm font-black outline-none focus:ring-4 focus:ring-teal-50 focus:border-teal-500 transition-all shadow-sm"
+        />
       </div>
 
-      <div className="space-y-12">
-        {categories.map(cat => (
-          <div key={cat} className="space-y-6">
-            <h3 className="text-[11px] font-black text-slate-400 mb-4 border-l-4 border-teal-500 pl-3 uppercase tracking-widest">{cat}</h3>
-            <div className="space-y-6">
-              {skills.filter(s => s.category === cat).map(skill => {
-                const prog = progressList.find(p => p.skillId === skill.id);
-                const level = prog?.level || 0;
-                return (
-                  <div key={skill.id} className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm space-y-5">
-                    <div className="flex justify-between items-start">
-                      <h4 className="font-black text-slate-800 text-base flex items-center gap-2">
-                        {skill.name}
-                        {!isMentor && level === 0 && <LockKeyhole size={14} className="text-slate-300" />}
-                      </h4>
-                      <span className={`text-[10px] font-black px-3 py-1 rounded-full border ${level > 0 ? 'bg-teal-50 text-teal-600 border-teal-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
-                        {SkillLevelLabels[level as SkillLevel]}
-                      </span>
-                    </div>
-                    
-                    {/* 鍵方式：スタッフの場合はボタンを無効化 */}
-                    <div className="grid grid-cols-4 gap-2">
-                      {[0, 1, 2, 3].map(l => (
-                        <button 
-                          key={l} 
-                          disabled={!isMentor}
-                          onClick={() => onUpdateProgress(targetUserId!, skill.id, { level: l as SkillLevel })} 
-                          className={`py-3 rounded-2xl text-[10px] font-black border-2 transition-all relative
-                            ${level === l ? 'bg-teal-600 text-white border-teal-700 shadow-lg shadow-teal-100' : 'bg-white text-slate-400 border-slate-50'}
-                            ${!isMentor ? 'cursor-default opacity-80' : 'active:border-teal-200 active:scale-95'}
-                          `}
-                        >
-                          {SkillLevelLabels[l as SkillLevel]}
-                          {!isMentor && l !== level && (
-                            <div className="absolute top-1 right-1 opacity-20">
-                              <LockKeyhole size={8} />
-                            </div>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-
-                    {isMentor && (
-                      <div className="space-y-2 pt-2">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">アドバイス・評価コメント</label>
-                        <textarea 
-                          className="w-full p-4 bg-amber-50/50 border border-amber-100 rounded-2xl text-xs outline-none focus:ring-2 focus:ring-amber-500 font-bold placeholder:text-amber-200" 
-                          placeholder="ここが良かった！次への課題は..." 
-                          value={prog?.mentorComment || ''} 
-                          onChange={(e) => onUpdateProgress(targetUserId!, skill.id, { mentorComment: e.target.value })} 
-                        />
-                      </div>
-                    )}
-                    
-                    {!isMentor && prog?.mentorComment && (
-                      <div className="p-4 bg-amber-50 text-amber-900 rounded-[20px] text-xs border border-amber-100 font-bold relative animate-in slide-in-from-top-2">
-                         <div className="absolute -top-2 left-4 bg-white px-2 rounded-full border border-amber-100 flex items-center gap-1">
-                            <Sparkles size={10} className="text-amber-500" />
-                            <span className="text-[8px] font-black text-amber-500 uppercase tracking-widest">Mentor's Advice</span>
-                         </div>
-                         <p className="mt-1 leading-relaxed">{prog.mentorComment}</p>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+      <div className="space-y-3">
+        {filtered.map(p => (
+          <button 
+            key={p.id}
+            onClick={() => navigate(`/procedures/${p.id}`)}
+            className="w-full bg-white p-5 rounded-[32px] border border-slate-100 shadow-sm flex items-center justify-between group active:scale-[0.98] transition-all hover:border-teal-200"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-teal-600 group-hover:bg-teal-600 group-hover:text-white transition-all shadow-inner">
+                {p.videoUrl ? <Video size={20} /> : <BookOpen size={20} />}
+              </div>
+              <div className="text-left">
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{p.category}</p>
+                <p className="font-black text-slate-800 text-sm mt-0.5">{p.title}</p>
+              </div>
             </div>
-          </div>
+            <ChevronRight size={18} className="text-slate-200 group-hover:text-teal-400 group-hover:translate-x-1 transition-all" />
+          </button>
         ))}
       </div>
     </div>
   );
 };
 
-const QAPage: React.FC<{ qaList: QA[]; onSave: (id: string | null, question: string, answer: string, tags: string) => void; onDelete: (id: string) => void; user: User; }> = ({ qaList, onSave, onDelete, user }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isEditing, setIsEditing] = useState<string | null>(null);
-  const [editQuestion, setEditQuestion] = useState('');
-  const [editAnswer, setEditAnswer] = useState('');
-  const isMentor = user.role === UserRole.MENTOR;
+/**
+ * SkillMapPage Component
+ * Visualizes and updates staff skill levels.
+ */
+const SkillMapPage: React.FC<{
+  user: User;
+  skills: Skill[];
+  allProgress: Record<string, UserSkillProgress[]>;
+  allUsers: User[];
+  onUpdateProgress: (targetUserId: string, skillId: string, updates: Partial<UserSkillProgress>) => void;
+}> = ({ user, skills, allProgress, allUsers, onUpdateProgress }) => {
+  const { userId } = useParams();
+  const navigate = useNavigate();
+  const targetId = userId || user.id;
+  const targetUser = allUsers.find(u => u.id === targetId) || user;
+  const progressData = allProgress[targetId] || [];
 
-  const handleSave = () => {
-    if (!editQuestion || !editAnswer) return;
-    onSave(isEditing === 'new' ? null : isEditing, editQuestion, editAnswer, "");
-    setIsEditing(null);
+  const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
+  const [tempLevel, setTempLevel] = useState<SkillLevel>(SkillLevel.UNEXPERIENCED);
+  const [tempComment, setTempComment] = useState('');
+
+  const stats = calculateProgress(skills, progressData);
+  const rank = getRankInfo(stats);
+
+  const startEdit = (skill: Skill) => {
+    if (user.role !== UserRole.MENTOR) return;
+    const current = progressData.find(p => p.skillId === skill.id);
+    setEditingSkillId(skill.id);
+    setTempLevel(current?.level || SkillLevel.UNEXPERIENCED);
+    setTempComment(current?.mentorComment || '');
+  };
+
+  const save = () => {
+    if (editingSkillId) {
+      onUpdateProgress(targetId, editingSkillId, { level: tempLevel, mentorComment: tempComment });
+      setEditingSkillId(null);
+    }
   };
 
   return (
-    <div className="p-4 pb-24 animate-in fade-in duration-300">
-      <div className="flex gap-2 mb-6">
-        <div className="relative flex-1">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <input type="text" placeholder="ナレッジを検索..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl shadow-sm outline-none font-bold focus:ring-2 focus:ring-teal-500 transition-all" />
-        </div>
-        <button onClick={() => { setIsEditing('new'); setEditQuestion(''); setEditAnswer(''); }} className="w-12 h-12 bg-teal-600 text-white rounded-2xl flex items-center justify-center shadow-lg active:scale-95 transition-all"><Plus size={24} /></button>
-      </div>
-
-      {isEditing ? (
-        <div className="bg-white rounded-[32px] p-8 shadow-xl border border-slate-100 space-y-6 mb-8 animate-in zoom-in-95 duration-200">
-          <h3 className="text-lg font-black text-slate-800">{isEditing === 'new' ? '新規Q&A追加' : 'Q&A編集'}</h3>
-          <div className="space-y-4">
-             <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">質問 (Question)</label>
-              <input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-teal-500" value={editQuestion} onChange={e => setEditQuestion(e.target.value)} placeholder="例: 消毒液の希釈倍率は？" />
+    <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-500">
+      <div className="bg-white p-8 rounded-[48px] shadow-sm border border-slate-100 space-y-6 relative overflow-hidden">
+        <div className={`absolute top-0 right-0 w-32 h-32 ${rank.color} opacity-5 -mr-16 -mt-16 rounded-full`}></div>
+        <div className="flex justify-between items-center relative z-10">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 bg-slate-50 rounded-[24px] flex items-center justify-center text-teal-600 font-black text-2xl shadow-inner border border-white">
+              {targetUser.name.charAt(0)}
             </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">回答 (Answer)</label>
-              <textarea className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm min-h-[150px] outline-none focus:ring-2 focus:ring-teal-500 font-bold" value={editAnswer} onChange={e => setEditAnswer(e.target.value)} placeholder="詳しく回答を入力してください" />
+            <div>
+              <h2 className="text-xl font-black text-slate-800">{targetUser.name}</h2>
+              <div className="flex items-center gap-2 mt-1">
+                <span className={`px-2 py-0.5 rounded-full text-[8px] font-black text-white ${rank.color}`}>{rank.label}</span>
+                <span className="text-[9px] text-slate-400 font-black tracking-widest uppercase">Skill Map</span>
+              </div>
             </div>
           </div>
-          <div className="flex gap-2 pt-2">
-            <button onClick={handleSave} className="flex-1 py-4 bg-teal-600 text-white rounded-2xl font-black shadow-lg shadow-teal-100 active:scale-95 transition-all">保存</button>
-            <button onClick={() => setIsEditing(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black active:scale-95 transition-all">キャンセル</button>
+          <div className="text-right">
+             <span className="text-3xl font-black text-teal-600 tabular-nums">{stats}<span className="text-xs ml-0.5">%</span></span>
+          </div>
+        </div>
+        <div className="w-full h-2 bg-slate-50 rounded-full overflow-hidden p-0.5 shadow-inner">
+           <div className={`h-full rounded-full transition-all duration-700 ${rank.color}`} style={{ width: `${stats}%` }}></div>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <h3 className="text-[11px] font-black text-slate-400 flex items-center gap-2 uppercase tracking-widest px-2">
+          <MapIcon size={14} className="text-teal-600" /> スキル項目一覧
+        </h3>
+        
+        <div className="space-y-3">
+          {skills.map(skill => {
+            const p = progressData.find(sp => sp.skillId === skill.id);
+            const level = p?.level || 0;
+            return (
+              <div key={skill.id} className="bg-white p-5 rounded-[32px] border border-slate-100 shadow-sm space-y-4">
+                <div className="flex justify-between items-center">
+                   <div>
+                    <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">{skill.category}</span>
+                    <p className="font-black text-slate-800 text-sm">{skill.name}</p>
+                   </div>
+                   {user.role === UserRole.MENTOR ? (
+                     <button onClick={() => startEdit(skill)} className="p-3 bg-slate-50 rounded-2xl text-slate-400 hover:text-teal-600 transition-all">
+                       <Edit2 size={16} />
+                     </button>
+                   ) : (
+                     <div className="flex gap-1">
+                        {[1, 2, 3].map(l => (
+                          <div key={l} className={`w-3 h-3 rounded-full ${l <= level ? 'bg-teal-500 shadow-[0_0_8px_rgba(20,184,166,0.4)]' : 'bg-slate-100'}`}></div>
+                        ))}
+                     </div>
+                   )}
+                </div>
+
+                {editingSkillId === skill.id ? (
+                  <div className="p-6 bg-slate-50 rounded-[32px] space-y-4 animate-in zoom-in-95 duration-200">
+                    <div className="flex justify-between gap-2">
+                      {[0, 1, 2, 3].map(l => (
+                        <button 
+                          key={l}
+                          onClick={() => setTempLevel(l as SkillLevel)}
+                          className={`flex-1 py-3 rounded-2xl text-[10px] font-black transition-all ${
+                            tempLevel === l ? 'bg-teal-600 text-white shadow-lg shadow-teal-100' : 'bg-white text-slate-400 border border-slate-100'
+                          }`}
+                        >
+                          {SkillLevelLabels[l as SkillLevel]}
+                        </button>
+                      ))}
+                    </div>
+                    <textarea 
+                      placeholder="メンターからのコメント..." 
+                      value={tempComment}
+                      onChange={e => setTempComment(e.target.value)}
+                      className="w-full p-4 bg-white border-none rounded-2xl text-xs font-bold outline-none min-h-[80px]"
+                    />
+                    <div className="flex gap-2">
+                      <button onClick={() => setEditingSkillId(null)} className="flex-1 py-3 bg-white text-slate-400 rounded-2xl text-[10px] font-black border border-slate-100">キャンセル</button>
+                      <button onClick={save} className="flex-1 py-3 bg-teal-600 text-white rounded-2xl text-[10px] font-black shadow-lg shadow-teal-100">保存</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                      <span>{SkillLevelLabels[level as SkillLevel]}</span>
+                      <span className="opacity-40">{p?.updatedAt ? new Date(p.updatedAt).toLocaleDateString() : '-'}</span>
+                    </div>
+                    {p?.mentorComment && (
+                      <div className="p-4 bg-teal-50/50 rounded-2xl border border-teal-100/50 flex gap-3">
+                        <MessageSquare size={14} className="text-teal-400 mt-0.5" />
+                        <p className="text-xs font-bold text-teal-800/70 leading-relaxed">{p.mentorComment}</p>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * QAPage Component
+ * Clinic-specific knowledge base and Q&A.
+ */
+const QAPage: React.FC<{
+  user: User;
+  qaList: QA[];
+  onSave: (id: string | null, question: string, answer: string, tags: string) => void;
+  onDelete: (id: string) => void;
+}> = ({ user, qaList, onSave, onDelete }) => {
+  const [search, setSearch] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [q, setQ] = useState('');
+  const [a, setA] = useState('');
+  const [t, setT] = useState('');
+
+  const filtered = qaList.filter(item => 
+    item.question.toLowerCase().includes(search.toLowerCase()) || 
+    item.answer.toLowerCase().includes(search.toLowerCase()) ||
+    item.tags.some(tag => tag.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  const startAdd = () => {
+    setQ(''); setA(''); setT('');
+    setIsAdding(true);
+  };
+
+  const startEdit = (item: QA) => {
+    setQ(item.question); setA(item.answer); setT(item.tags.join(', '));
+    setEditingId(item.id);
+  };
+
+  const handleSave = () => {
+    onSave(editingId, q, a, t);
+    setIsAdding(false);
+    setEditingId(null);
+  };
+
+  return (
+    <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-500">
+      <div className="flex justify-between items-center px-2">
+        <h2 className="text-2xl font-black text-slate-800 tracking-tight">院内ナレッジ</h2>
+        {user.role === UserRole.MENTOR && !isAdding && !editingId && (
+          <button onClick={startAdd} className="p-3 bg-amber-500 text-white rounded-2xl shadow-lg shadow-amber-100 active:scale-95 transition-all">
+            <Plus size={20} />
+          </button>
+        )}
+      </div>
+
+      {(isAdding || editingId) ? (
+        <div className="bg-white p-8 rounded-[48px] border border-slate-100 shadow-sm space-y-6 animate-in slide-in-from-bottom-4 duration-300">
+          <div className="flex justify-between items-center">
+            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">{editingId ? '回答を編集' : '新しい質問を追加'}</h3>
+            <button onClick={() => { setIsAdding(false); setEditingId(null); }} className="text-slate-300 hover:text-red-400 transition-colors"><X size={20} /></button>
+          </div>
+          <div className="space-y-4">
+            <input 
+              placeholder="質問内容は？" 
+              value={q} 
+              onChange={e => setQ(e.target.value)}
+              className="w-full p-4 bg-slate-50 border-none rounded-2xl text-sm font-black outline-none focus:ring-2 focus:ring-amber-400"
+            />
+            <textarea 
+              placeholder="回答やルールを記入してください" 
+              value={a} 
+              onChange={e => setA(e.target.value)}
+              className="w-full p-4 bg-slate-50 border-none rounded-2xl text-sm font-bold outline-none min-h-[150px] focus:ring-2 focus:ring-amber-400"
+            />
+            <input 
+              placeholder="タグ (カンマ区切り)" 
+              value={t} 
+              onChange={e => setT(e.target.value)}
+              className="w-full p-4 bg-slate-50 border-none rounded-2xl text-[10px] font-black outline-none focus:ring-2 focus:ring-amber-400"
+            />
+            <button 
+              onClick={handleSave}
+              className="w-full py-4 bg-amber-500 text-white rounded-2xl font-black text-sm shadow-xl shadow-amber-100"
+            >
+              ナレッジを保存
+            </button>
           </div>
         </div>
       ) : (
-        <div className="space-y-5">
-          {qaList.filter(q => q.question.toLowerCase().includes(searchTerm.toLowerCase())).map(qa => (
-            <div key={qa.id} className="bg-white rounded-[32px] border border-slate-100 p-7 shadow-sm group hover:border-teal-100 transition-all">
-              <div className="flex justify-between items-center mb-4">
-                <span className="text-teal-600 font-black text-[10px] uppercase tracking-widest bg-teal-50 px-3 py-1 rounded-full border border-teal-100">Question</span>
-                {isMentor && (
-                  <div className="flex gap-2">
-                    <button onClick={() => {setIsEditing(qa.id); setEditQuestion(qa.question); setEditAnswer(qa.answer);}} className="p-2 text-slate-300 hover:text-teal-500 transition-colors"><Edit2 size={16} /></button>
-                    <button onClick={() => onDelete(qa.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
+        <>
+          <div className="relative group mx-2">
+            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-amber-500 transition-colors" size={18} />
+            <input 
+              placeholder="知識・ルールを検索..." 
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-14 pr-6 py-4 bg-white border border-slate-100 rounded-3xl text-sm font-black outline-none focus:ring-4 focus:ring-amber-50 focus:border-amber-500 transition-all shadow-sm"
+            />
+          </div>
+
+          <div className="space-y-4">
+            {filtered.map(item => (
+              <div key={item.id} className="bg-white p-6 rounded-[40px] border border-slate-100 shadow-sm space-y-4 group">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {item.tags.map(tag => (
+                        <span key={tag} className="px-2 py-0.5 bg-slate-50 text-slate-400 text-[8px] font-black rounded-full border border-slate-100 uppercase tracking-tighter">#{tag}</span>
+                      ))}
+                    </div>
+                    <h4 className="font-black text-slate-800 text-base leading-tight">Q. {item.question}</h4>
                   </div>
-                )}
+                  {user.role === UserRole.MENTOR && (
+                    <div className="flex gap-2">
+                      <button onClick={() => startEdit(item)} className="p-2 bg-slate-50 rounded-xl text-slate-300 hover:text-amber-500 transition-colors">
+                        <Edit2 size={16} />
+                      </button>
+                      <button onClick={() => { if(confirm('削除しますか？')) onDelete(item.id); }} className="p-2 bg-slate-50 rounded-xl text-slate-300 hover:text-red-400 transition-colors">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="p-4 bg-amber-50/30 rounded-[24px] border border-amber-50">
+                  <p className="text-sm font-bold text-slate-600 leading-relaxed whitespace-pre-wrap">{item.answer}</p>
+                </div>
               </div>
-              <h4 className="font-black text-slate-800 text-lg mb-4 leading-snug">{qa.question}</h4>
-              <div className="p-5 bg-slate-50 rounded-[24px] text-sm text-slate-600 font-bold leading-relaxed border border-slate-100">
-                <span className="text-teal-600 mr-2">A.</span>{qa.answer}
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
 };
 
-const ProfilePage: React.FC<{ 
-  user: User; 
+/**
+ * ProfilePage Component
+ * User settings, profile updates, and staff management (Mentor only).
+ */
+const ProfilePage: React.FC<{
+  user: User;
   allUsers: User[];
-  onLogout: () => void;
   clinicName: string;
   onUpdateProfile: (name: string, clinicName: string) => void;
-  onAddUser: (name: string, role: UserRole, password: string) => void;
+  onLogout: () => void;
+  onAddUser: (name: string, role: UserRole, pass: string) => void;
   onDeleteUser: (id: string) => void;
-}> = ({ user, allUsers, onLogout, clinicName, onUpdateProfile, onAddUser, onDeleteUser }) => {
+}> = ({ user, allUsers, clinicName, onUpdateProfile, onLogout, onAddUser, onDeleteUser }) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [showAddUser, setShowAddUser] = useState(false);
-  const [tempName, setTempName] = useState(user.name);
-  const [tempClinic, setTempClinic] = useState(clinicName);
+  const [name, setName] = useState(user.name);
+  const [cName, setCName] = useState(clinicName);
 
-  const [newName, setNewName] = useState('');
-  const [newRole, setNewRole] = useState<UserRole>(UserRole.NEWBIE);
-  const [newPassword, setNewPassword] = useState('');
+  const [isAddingUser, setIsAddingUser] = useState(false);
+  const [newStaffName, setNewStaffName] = useState('');
+  const [newStaffRole, setNewStaffRole] = useState<UserRole>(UserRole.NEWBIE);
+  const [newStaffPass, setNewStaffPass] = useState('1234');
 
-  const isMentor = user.role === UserRole.MENTOR;
+  const handleUpdate = () => {
+    onUpdateProfile(name, cName);
+    setIsEditing(false);
+  };
 
-  const handleAddUserSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newName || !newPassword) return;
-    onAddUser(newName, newRole, newPassword);
-    setNewName('');
-    setNewPassword('');
-    setShowAddUser(false);
+  const handleAddStaff = () => {
+    if (newStaffName) {
+      onAddUser(newStaffName, newStaffRole, newStaffPass);
+      setNewStaffName('');
+      setIsAddingUser(false);
+    }
   };
 
   return (
-    <div className="p-4 pb-24 text-center animate-in fade-in duration-300">
-      <div className="py-12">
-        <div className="w-24 h-24 bg-teal-50 rounded-[40px] flex items-center justify-center text-teal-600 mx-auto mb-6 border-4 border-white shadow-xl shadow-teal-100/50">
-          <UserIcon size={48} />
+    <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-500">
+      <div className="bg-white p-8 rounded-[48px] border border-slate-100 shadow-sm flex flex-col items-center text-center space-y-4">
+        <div className="relative">
+           <div className={`w-24 h-24 rounded-[36px] flex items-center justify-center text-white font-black text-4xl shadow-2xl ${user.role === UserRole.MENTOR ? 'bg-amber-500 shadow-amber-200' : 'bg-teal-600 shadow-teal-200'}`}>
+            {user.name.charAt(0)}
+           </div>
+           <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-white rounded-2xl shadow-lg border border-slate-50 flex items-center justify-center text-slate-400">
+             <Settings size={20} />
+           </div>
         </div>
-        {isEditing ? (
-          <div className="space-y-4 max-w-xs mx-auto animate-in zoom-in-95 duration-200">
-            <input className="w-full p-4 border border-slate-200 rounded-2xl font-bold outline-none shadow-sm focus:ring-2 focus:ring-teal-500" placeholder="お名前" value={tempName} onChange={e => setTempName(e.target.value)} />
-            {isMentor && (
-              <input className="w-full p-4 border border-slate-200 rounded-2xl font-bold outline-none shadow-sm focus:ring-2 focus:ring-teal-500" placeholder="医院名" value={tempClinic} onChange={e => setTempClinic(e.target.value)} />
-            )}
-            <div className="flex gap-2">
-              <button onClick={() => { onUpdateProfile(tempName, tempClinic); setIsEditing(false); }} className="flex-1 py-4 bg-teal-600 text-white rounded-2xl font-black shadow-lg shadow-teal-100 active:scale-95 transition-all">保存</button>
-              <button onClick={() => setIsEditing(false)} className="flex-1 py-4 bg-slate-100 text-slate-400 rounded-2xl font-black active:scale-95 transition-all">取消</button>
-            </div>
-          </div>
+        <div>
+          <h2 className="text-2xl font-black text-slate-800">{user.name}</h2>
+          <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">{clinicName} / {user.role}</p>
+        </div>
+        {!isEditing ? (
+          <button onClick={() => setIsEditing(true)} className="px-6 py-2 bg-slate-50 text-slate-400 rounded-full text-[10px] font-black uppercase tracking-widest border border-slate-100 hover:bg-slate-100 transition-all">プロフィール編集</button>
         ) : (
-          <div className="animate-in slide-in-from-bottom-2 duration-300">
-            <h2 className="text-2xl font-black text-slate-800 flex items-center justify-center gap-2">
-              {user.name} 
-              <button onClick={() => setIsEditing(true)} className="p-2 text-slate-300 hover:text-teal-500 transition-colors">
-                <Edit2 size={18} />
-              </button>
-            </h2>
-            <p className="text-slate-400 font-black mt-2 uppercase tracking-widest text-[10px]">
-              {user.role === UserRole.MENTOR ? 'Mentor' : 'Staff'} / {clinicName}
-            </p>
+          <div className="w-full space-y-4 pt-4 border-t border-slate-50">
+            <div className="space-y-2 text-left">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">名前</label>
+              <input value={name} onChange={e => setName(e.target.value)} className="w-full p-4 bg-slate-50 rounded-2xl text-sm font-black outline-none focus:ring-2 focus:ring-teal-500" />
+            </div>
+            <div className="space-y-2 text-left">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">クリニック名</label>
+              <input value={cName} onChange={e => setCName(e.target.value)} className="w-full p-4 bg-slate-50 rounded-2xl text-sm font-black outline-none focus:ring-2 focus:ring-teal-500" />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setIsEditing(false)} className="flex-1 py-4 bg-slate-50 text-slate-400 rounded-2xl text-[10px] font-black">キャンセル</button>
+              <button onClick={handleUpdate} className="flex-1 py-4 bg-teal-600 text-white rounded-2xl text-[10px] font-black shadow-lg shadow-teal-100">保存</button>
+            </div>
           </div>
         )}
       </div>
 
-      {isMentor && (
-        <section className="mt-4 mb-12 space-y-6">
-          <div className="flex items-center justify-between px-2">
-            <h3 className="text-sm font-black text-slate-800 flex items-center gap-2 uppercase tracking-widest">
-              <UsersIcon size={18} className="text-teal-600" /> スタッフ管理
-            </h3>
-            <button 
-              onClick={() => setShowAddUser(!showAddUser)}
-              className="flex items-center gap-1.5 px-5 py-2.5 bg-teal-600 text-white text-[10px] font-black rounded-full shadow-lg shadow-teal-100 active:scale-95 transition-all"
-            >
-              <UserPlus size={14} /> 新規登録
-            </button>
+      {user.role === UserRole.MENTOR && (
+        <section className="space-y-4">
+          <div className="flex justify-between items-center px-2">
+             <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+               <UsersIcon size={14} className="text-teal-600" /> スタッフ管理
+             </h3>
+             <button onClick={() => setIsAddingUser(true)} className="p-2 bg-teal-50 text-teal-600 rounded-xl border border-teal-100"><UserPlus size={18} /></button>
           </div>
-
-          {showAddUser && (
-            <form onSubmit={handleAddUserSubmit} className="bg-white p-7 rounded-[32px] border-2 border-teal-50 shadow-xl shadow-slate-100 space-y-5 text-left animate-in zoom-in-95 duration-200">
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">スタッフ名</label>
-                <input className="w-full p-4 bg-slate-50 border border-slate-50 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-teal-500" placeholder="例: 佐藤 はなこ" value={newName} onChange={e => setNewName(e.target.value)} required />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">ログイン用パスワード</label>
-                <input className="w-full p-4 bg-slate-50 border border-slate-50 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-teal-500" placeholder="4桁以上の英数字推奨" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">権限設定</label>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setNewRole(UserRole.NEWBIE)} className={`flex-1 py-3 rounded-2xl text-[10px] font-black border-2 transition-all ${newRole === UserRole.NEWBIE ? 'bg-teal-600 text-white border-teal-700 shadow-lg shadow-teal-100' : 'bg-white text-slate-400 border-slate-50 active:border-teal-200'}`}>Staff</button>
-                  <button type="button" onClick={() => setNewRole(UserRole.MENTOR)} className={`flex-1 py-3 rounded-2xl text-[10px] font-black border-2 transition-all ${newRole === UserRole.MENTOR ? 'bg-amber-500 text-white border-amber-600 shadow-lg shadow-amber-100' : 'bg-white text-slate-400 border-slate-50 active:border-amber-200'}`}>Mentor</button>
-                </div>
-              </div>
-              <button type="submit" className="w-full py-4 bg-teal-600 text-white rounded-2xl font-black text-sm shadow-xl shadow-teal-100 active:scale-[0.98] transition-all">スタッフを登録する</button>
-            </form>
+          
+          {isAddingUser && (
+            <div className="bg-white p-6 rounded-[36px] border border-teal-100 shadow-xl shadow-teal-50 space-y-4 animate-in slide-in-from-top-4 duration-300">
+               <input placeholder="スタッフ名" value={newStaffName} onChange={e => setNewStaffName(e.target.value)} className="w-full p-4 bg-slate-50 rounded-2xl text-sm font-black outline-none focus:ring-2 focus:ring-teal-500" />
+               <div className="flex gap-2">
+                 <button onClick={() => setNewStaffRole(UserRole.NEWBIE)} className={`flex-1 py-3 rounded-xl text-[10px] font-black ${newStaffRole === UserRole.NEWBIE ? 'bg-teal-600 text-white' : 'bg-slate-50 text-slate-400'}`}>スタッフ</button>
+                 <button onClick={() => setNewStaffRole(UserRole.MENTOR)} className={`flex-1 py-3 rounded-xl text-[10px] font-black ${newStaffRole === UserRole.MENTOR ? 'bg-amber-500 text-white' : 'bg-slate-50 text-slate-400'}`}>教育係</button>
+               </div>
+               <input placeholder="初期パスワード" value={newStaffPass} onChange={e => setNewStaffPass(e.target.value)} className="w-full p-4 bg-slate-50 rounded-2xl text-sm font-black outline-none focus:ring-2 focus:ring-teal-500" />
+               <div className="flex gap-2">
+                 <button onClick={() => setIsAddingUser(false)} className="flex-1 py-3 bg-slate-50 text-slate-400 rounded-xl text-[10px] font-black">閉じる</button>
+                 <button onClick={handleAddStaff} className="flex-1 py-3 bg-teal-600 text-white rounded-xl text-[10px] font-black">追加</button>
+               </div>
+            </div>
           )}
 
-          <div className="space-y-3">
+          <div className="space-y-2">
             {allUsers.filter(u => u.id !== user.id).map(u => (
-              <div key={u.id} className="flex items-center justify-between p-5 bg-white rounded-[24px] border border-slate-100 shadow-sm hover:border-teal-100 transition-all">
-                <div className="flex items-center gap-4">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-inner ${u.role === UserRole.MENTOR ? 'bg-amber-50 text-amber-600' : 'bg-teal-50 text-teal-600'}`}>
-                    <UserIcon size={18} />
+              <div key={u.id} className="bg-white p-4 rounded-[28px] border border-slate-100 shadow-sm flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm ${u.role === UserRole.MENTOR ? 'bg-amber-50 text-amber-500' : 'bg-teal-50 text-teal-600'}`}>
+                    {u.name.charAt(0)}
                   </div>
-                  <div className="text-left">
-                    <p className="text-sm font-black text-slate-700">{u.name}</p>
-                    <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest">{u.role}</p>
+                  <div>
+                    <p className="text-sm font-black text-slate-800">{u.name}</p>
+                    <p className="text-[8px] text-slate-400 font-black uppercase tracking-widest">{u.role}</p>
                   </div>
                 </div>
-                <button onClick={() => onDeleteUser(u.id)} className="p-2.5 text-slate-200 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
-                  <Trash2 size={18} />
+                <button onClick={() => onDeleteUser(u.id)} className="p-2 text-slate-200 hover:text-red-400 transition-colors">
+                  <Trash2 size={16} />
                 </button>
               </div>
             ))}
@@ -939,114 +1031,135 @@ const ProfilePage: React.FC<{
         </section>
       )}
 
-      <button onClick={onLogout} className="w-full p-5 bg-white border border-red-100 text-red-500 rounded-[24px] font-black flex items-center justify-center gap-3 active:bg-red-50 transition-all shadow-sm mb-4">
-        <LogOut size={20} /> アプリをログアウト
+      <button 
+        onClick={onLogout}
+        className="w-full py-5 bg-white border border-red-100 text-red-500 rounded-[32px] font-black text-sm flex items-center justify-center gap-3 active:scale-95 transition-all shadow-sm"
+      >
+        <LogOut size={20} />
+        ログアウトする
       </button>
+
+      <div className="text-center pt-4">
+        <p className="text-[10px] text-slate-300 font-black uppercase tracking-[0.3em]">Version 2.0.4 - Nanairo Cloud</p>
+      </div>
     </div>
   );
 };
+
+// --- Full AppContent ---
 
 const AppContent: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // --- States ---
   const [allUsers, setAllUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('dh_path_all_users');
+    const saved = localStorage.getItem(APP_STORAGE_KEYS.USERS);
     return saved ? JSON.parse(saved) : INITIAL_USERS;
   });
 
   const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('dh_path_logged_user');
+    const saved = localStorage.getItem(APP_STORAGE_KEYS.LOGGED_USER);
     return saved ? JSON.parse(saved) : null;
   });
 
-  const [clinicName, setClinicName] = useState(() => localStorage.getItem('dh_path_clinic_name') || DEFAULT_CLINIC_NAME);
+  const [clinicName, setClinicName] = useState(() => localStorage.getItem(APP_STORAGE_KEYS.CLINIC_NAME) || DEFAULT_CLINIC_NAME);
 
   const [qaList, setQaList] = useState<QA[]>(() => {
-    const saved = localStorage.getItem('dh_path_qa_list');
+    const saved = localStorage.getItem(APP_STORAGE_KEYS.QA);
     return saved ? JSON.parse(saved) : MOCK_QA;
   });
 
   const [proceduresList, setProceduresList] = useState<Procedure[]>(() => {
-    const saved = localStorage.getItem('dh_path_procedures');
+    const saved = localStorage.getItem(APP_STORAGE_KEYS.PROCEDURES);
     return saved ? JSON.parse(saved) : MOCK_PROCEDURES;
   });
 
-  const [skillsList] = useState<Skill[]>(MOCK_SKILLS);
-
   const [allSkillProgress, setAllSkillProgress] = useState<Record<string, UserSkillProgress[]>>(() => {
-    const saved = localStorage.getItem('dh_path_all_skill_progress');
+    const saved = localStorage.getItem(APP_STORAGE_KEYS.PROGRESS);
     return saved ? JSON.parse(saved) : {};
   });
 
   const [userMemos, setUserMemos] = useState<Record<string, string>>(() => {
-    const saved = localStorage.getItem('dh_path_all_memos');
+    const saved = localStorage.getItem(APP_STORAGE_KEYS.MEMOS);
     return saved ? JSON.parse(saved) : {};
   });
 
-  const handleSaveMemo = (memo: string) => {
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // --- Persistence Wrappers (Service Simulation) ---
+  const persistData = useCallback(async (key: string, data: any) => {
+    setIsSaving(true);
+    setIsSyncing(true);
+    // Simulation of network delay
+    await new Promise(r => setTimeout(r, 600));
+    localStorage.setItem(key, JSON.stringify(data));
+    setIsSaving(false);
+    setIsSyncing(false);
+  }, []);
+
+  const handleSaveMemo = async (memo: string) => {
     if (!user) return;
     const newMemos = { ...userMemos, [user.id]: memo };
     setUserMemos(newMemos);
-    localStorage.setItem('dh_path_all_memos', JSON.stringify(newMemos));
-    alert("自分用メモを保存しました");
+    await persistData(APP_STORAGE_KEYS.MEMOS, newMemos);
   };
 
-  const handleAddUser = (name: string, role: UserRole, password: string) => {
+  const handleAddUser = async (name: string, role: UserRole, password: string) => {
     const newUser: User = { id: `u-${Date.now()}`, name, role, clinicId: 'c1', password };
     const newList = [...allUsers, newUser];
     setAllUsers(newList);
-    localStorage.setItem('dh_path_all_users', JSON.stringify(newList));
-    alert(`${name}さんの登録が完了しました。初期パスワード: ${password}`);
+    await persistData(APP_STORAGE_KEYS.USERS, newList);
   };
 
-  const handleDeleteUser = (id: string) => {
-    if (confirm("このスタッフ情報を完全に削除しますか？進捗データも削除されます。")) {
+  const handleDeleteUser = async (id: string) => {
+    if (confirm("スタッフ情報を削除しますか？")) {
       const newList = allUsers.filter(u => u.id !== id);
       setAllUsers(newList);
-      localStorage.setItem('dh_path_all_users', JSON.stringify(newList));
+      await persistData(APP_STORAGE_KEYS.USERS, newList);
     }
   };
 
-  const handleUpdateProfile = (name: string, newClinicName: string) => {
+  const handleUpdateProfile = async (name: string, newClinicName: string) => {
     if (!user) return;
     const updatedUser = { ...user, name };
     setUser(updatedUser);
     setClinicName(newClinicName);
-    localStorage.setItem('dh_path_clinic_name', newClinicName);
+    localStorage.setItem(APP_STORAGE_KEYS.CLINIC_NAME, newClinicName);
     const updatedAllUsers = allUsers.map(u => u.id === user.id ? updatedUser : u);
     setAllUsers(updatedAllUsers);
-    localStorage.setItem('dh_path_logged_user', JSON.stringify(updatedUser));
-    localStorage.setItem('dh_path_all_users', JSON.stringify(updatedAllUsers));
+    localStorage.setItem(APP_STORAGE_KEYS.LOGGED_USER, JSON.stringify(updatedUser));
+    await persistData(APP_STORAGE_KEYS.USERS, updatedAllUsers);
   };
 
   const handleLogin = (u: User) => {
     setUser(u);
-    localStorage.setItem('dh_path_logged_user', JSON.stringify(u));
+    localStorage.setItem(APP_STORAGE_KEYS.LOGGED_USER, JSON.stringify(u));
     navigate('/');
   };
 
   const handleLogout = () => {
     setUser(null);
-    localStorage.removeItem('dh_path_logged_user');
+    localStorage.removeItem(APP_STORAGE_KEYS.LOGGED_USER);
     navigate('/login');
   };
 
-  const handleSaveProcedure = (proc: Partial<Procedure>) => {
+  const handleSaveProcedure = async (proc: Partial<Procedure>) => {
     const newList = proc.id 
       ? proceduresList.map(p => p.id === proc.id ? { ...p, ...proc } as Procedure : p)
       : [{ ...proc, id: `proc-${Date.now()}` } as Procedure, ...proceduresList];
     setProceduresList(newList);
-    localStorage.setItem('dh_path_procedures', JSON.stringify(newList));
+    await persistData(APP_STORAGE_KEYS.PROCEDURES, newList);
   };
 
-  const handleDeleteProcedure = (id: string) => {
+  const handleDeleteProcedure = async (id: string) => {
     const newList = proceduresList.filter(p => p.id !== id);
     setProceduresList(newList);
-    localStorage.setItem('dh_path_procedures', JSON.stringify(newList));
+    await persistData(APP_STORAGE_KEYS.PROCEDURES, newList);
   };
 
-  const handleUpdateSkillProgress = (targetUserId: string, skillId: string, updates: Partial<UserSkillProgress>) => {
+  const handleUpdateSkillProgress = async (targetUserId: string, skillId: string, updates: Partial<UserSkillProgress>) => {
     const userProgress = [...(allSkillProgress[targetUserId] || [])];
     const index = userProgress.findIndex(p => p.skillId === skillId);
     if (index >= 0) {
@@ -1056,24 +1169,25 @@ const AppContent: React.FC = () => {
     }
     const newAllProgress = { ...allSkillProgress, [targetUserId]: userProgress };
     setAllSkillProgress(newAllProgress);
-    localStorage.setItem('dh_path_all_skill_progress', JSON.stringify(newAllProgress));
+    await persistData(APP_STORAGE_KEYS.PROGRESS, newAllProgress);
   };
 
-  const handleSaveQA = (id: string | null, question: string, answer: string, tags: string) => {
+  const handleSaveQA = async (id: string | null, question: string, answer: string, tags: string) => {
     const tagsArr = tags ? tags.split(',').map(t => t.trim()) : [];
     const newList = id 
       ? qaList.map(q => q.id === id ? { ...q, question, answer, tags: tagsArr } : q)
       : [{ id: `qa-${Date.now()}`, question, answer, tags: tagsArr }, ...qaList];
     setQaList(newList);
-    localStorage.setItem('dh_path_qa_list', JSON.stringify(newList));
+    await persistData(APP_STORAGE_KEYS.QA, newList);
   };
 
-  const handleDeleteQA = (id: string) => {
+  const handleDeleteQA = async (id: string) => {
     const newList = qaList.filter(q => q.id !== id);
     setQaList(newList);
-    localStorage.setItem('dh_path_qa_list', JSON.stringify(newList));
+    await persistData(APP_STORAGE_KEYS.QA, newList);
   };
 
+  // --- Auth Guard ---
   if (!user && location.pathname !== '/login') {
     return <Navigate to="/login" replace />;
   }
@@ -1092,21 +1206,29 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen max-w-md mx-auto bg-slate-50 shadow-2xl relative flex flex-col font-sans border-x border-slate-100">
-      <Header title={getPageTitle()} user={user} clinicName={clinicName} />
+    <div className="min-h-screen max-w-md mx-auto bg-slate-50 shadow-2xl relative flex flex-col font-sans border-x border-slate-100 overflow-hidden">
+      <Header title={getPageTitle()} user={user} clinicName={clinicName} isSyncing={isSyncing} />
       <main className="flex-1 overflow-y-auto no-scrollbar bg-slate-50/50">
         <Routes>
           <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage users={allUsers} onLogin={handleLogin} clinicName={clinicName} />} />
-          <Route path="/" element={<DashboardPage user={user!} procedures={proceduresList} allProgress={allSkillProgress} skills={skillsList} allUsers={allUsers} clinicName={clinicName} memo={userMemos[user?.id || ''] || ''} onSaveMemo={handleSaveMemo} />} />
+          <Route path="/" element={<DashboardPage user={user!} procedures={proceduresList} allProgress={allSkillProgress} skills={MOCK_SKILLS} allUsers={allUsers} clinicName={clinicName} memo={userMemos[user?.id || ''] || ''} onSaveMemo={handleSaveMemo} isSaving={isSaving} />} />
           <Route path="/procedures" element={<ProceduresPage user={user!} procedures={proceduresList} onSaveProcedure={handleSaveProcedure} onDeleteProcedure={handleDeleteProcedure} />} />
           <Route path="/procedures/:id" element={<ProceduresPage user={user!} procedures={proceduresList} onSaveProcedure={handleSaveProcedure} onDeleteProcedure={handleDeleteProcedure} />} />
-          <Route path="/skills" element={<SkillMapPage user={user!} skills={skillsList} allProgress={allSkillProgress} onUpdateProgress={handleUpdateSkillProgress} allUsers={allUsers} />} />
-          <Route path="/skills/:userId" element={<SkillMapPage user={user!} skills={skillsList} allProgress={allSkillProgress} onUpdateProgress={handleUpdateSkillProgress} allUsers={allUsers} />} />
+          <Route path="/skills" element={<SkillMapPage user={user!} skills={MOCK_SKILLS} allProgress={allSkillProgress} onUpdateProgress={handleUpdateSkillProgress} allUsers={allUsers} />} />
+          <Route path="/skills/:userId" element={<SkillMapPage user={user!} skills={MOCK_SKILLS} allProgress={allSkillProgress} onUpdateProgress={handleUpdateSkillProgress} allUsers={allUsers} />} />
           <Route path="/qa" element={<QAPage qaList={qaList} onSave={handleSaveQA} onDelete={handleDeleteQA} user={user!} />} />
           <Route path="/profile" element={<ProfilePage user={user!} allUsers={allUsers} onLogout={handleLogout} clinicName={clinicName} onUpdateProfile={handleUpdateProfile} onAddUser={handleAddUser} onDeleteUser={handleDeleteUser} />} />
         </Routes>
       </main>
       {user && <Navigation />}
+      
+      {/* Toast Notification for Sync Simulation */}
+      {isSaving && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 px-6 py-3 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-full shadow-2xl z-[100] flex items-center gap-2 animate-in slide-in-from-bottom-2">
+          <RefreshCw size={12} className="animate-spin text-teal-400" /> 
+          Syncing with Cloud...
+        </div>
+      )}
     </div>
   );
 };

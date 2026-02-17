@@ -1,20 +1,29 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
 
-# Run and deploy your AI Studio app
+# なないろアプリ - デプロイ & 共有データ化ガイド
 
-This contains everything you need to run your app locally.
+このアプリをGitHubにプッシュし、Vercelでリリースすることで、世界中のどこからでもアクセスできるようになります。また、複数ユーザー間でデータを共有するためのステップを以下に記載します。
 
-View your app in AI Studio: https://ai.studio/apps/drive/1yHd0c_lVmBwSvX_1KtlE-ifUlyEfKAJ2
+## 1. Vercelへのリリース手順
+1. このコードをGitHubリポジトリにプッシュします。
+2. Vercelにログインし、「New Project」からリポジトリを選択します。
+3. **Build Command**: なし（静的サイトとして認識されます）
+4. **Output Directory**: `.` (ルートディレクトリ)
+5. デプロイボタンを押せば完了です。
 
-## Run Locally
+## 2. 他の人とデータを共有するには？ (重要)
+現在のアプリは `localStorage` を使用しているため、データは「個人のブラウザ」にのみ保存されます。医院全体でデータを共有するには、以下のいずれかのデータベースを導入する必要があります。
 
-**Prerequisites:**  Node.js
+### 推奨: Supabase (難易度: 低〜中 / SaaS開発に最適)
+1. [Supabase](https://supabase.com/) でプロジェクトを作成します。
+2. `App.tsx` の `persistData` 関数の中身を、SupabaseのSDK（`supabase.from('table').upsert(...)`）に書き換えます。
+3. **メリット**: 
+   - リアルタイム同期機能があるため、院長が評価を入力すると即座にスタッフの画面が更新されます。
+   - 医療系に必要な堅牢な認証機能が最初から備わっています。
 
+### 簡易: Google Sheets (難易度: 中)
+1. Google Sheets APIを使用して、スプレッドシートをデータベースとして使います。
+2. 非エンジニアでもデータを直接確認できるメリットがありますが、リアルタイム性やセキュリティの面で Supabase に劣ります。
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## 3. SaaS化へのステップ
+- **認証**: 現在の簡易パスワードから、Supabase Auth等を用いた本格的なログインへ。
+- **医院ID管理**: `clinicId` をベースにデータをクエリし、他院のデータが見えないように RLS (Row Level Security) を設定します。
