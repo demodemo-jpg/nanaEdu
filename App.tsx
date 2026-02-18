@@ -42,7 +42,8 @@ import {
   Loader2,
   AlertCircle,
   ChevronLeft,
-  History
+  History,
+  ArrowDownUp
 } from 'lucide-react';
 
 // Firebase integration
@@ -474,16 +475,20 @@ const CalendarPage: React.FC<any> = ({ memoData, onSaveMemo, isSaving }) => {
   );
 };
 
-// --- Procedures List ---
+// --- Procedures List with Sort Mode ---
 const ProceduresPage: React.FC<any> = ({ procedures, user, onSaveMaster }) => {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
+  const [isSortMode, setIsSortMode] = useState(false);
   const isMentor = user.role === UserRole.MENTOR;
   
-  const filtered = procedures.filter((p: Procedure) => 
-    p.title.toLowerCase().includes(search.toLowerCase()) || 
-    p.category.toLowerCase().includes(search.toLowerCase())
-  );
+  // ソートモード時は全件表示して正確な入れ替えを可能にする
+  const filtered = isSortMode 
+    ? procedures 
+    : procedures.filter((p: Procedure) => 
+        p.title.toLowerCase().includes(search.toLowerCase()) || 
+        p.category.toLowerCase().includes(search.toLowerCase())
+      );
 
   const moveProcedure = (index: number, direction: 'up' | 'down') => {
     const newList = [...procedures];
@@ -500,48 +505,69 @@ const ProceduresPage: React.FC<any> = ({ procedures, user, onSaveMaster }) => {
           <button onClick={() => navigate('/')} className="p-2 bg-white rounded-xl shadow-sm"><ArrowLeft size={20} /></button>
           <h2 className="text-xl font-black text-slate-800">手順書マニュアル</h2>
         </div>
+        {isMentor && (
+          <button 
+            onClick={() => {
+              setIsSortMode(!isSortMode);
+              if (!isSortMode) setSearch('');
+            }} 
+            className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 ${isSortMode ? 'bg-teal-600 text-white shadow-lg' : 'bg-white text-slate-400 shadow-sm'}`}
+          >
+            <ArrowDownUp size={16} />
+            <span className="text-[10px] font-black uppercase tracking-widest">{isSortMode ? '完了' : '並べ替え'}</span>
+          </button>
+        )}
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-        <input 
-          type="text" 
-          placeholder="手順を検索..." 
-          className="w-full pl-12 pr-4 py-4 bg-white border border-slate-100 rounded-[24px] text-sm font-bold outline-none shadow-sm" 
-          value={search} 
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </div>
+      {!isSortMode && (
+        <div className="relative animate-in zoom-in-95">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+          <input 
+            type="text" 
+            placeholder="手順を検索..." 
+            className="w-full pl-12 pr-4 py-4 bg-white border border-slate-100 rounded-[24px] text-sm font-bold outline-none shadow-sm" 
+            value={search} 
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      )}
+
+      {isSortMode && (
+        <div className="bg-teal-50 border border-teal-100 p-4 rounded-2xl flex items-center gap-3 animate-pulse">
+          <GripVertical size={16} className="text-teal-600" />
+          <p className="text-[10px] font-black text-teal-800 uppercase tracking-widest">ドラッグは非対応です。矢印で順序を変更してください。</p>
+        </div>
+      )}
 
       <div className="space-y-3">
-        {filtered.map((p: Procedure) => {
-          const originalIdx = procedures.findIndex(item => item.id === p.id);
+        {filtered.map((p: Procedure, idx: number) => {
+          const originalIdx = isSortMode ? idx : procedures.findIndex(item => item.id === p.id);
           return (
             <div key={p.id} className="flex gap-2 items-stretch animate-in slide-in-from-left-2 transition-all">
-              {isMentor && (
-                <div className="flex flex-col gap-1 pr-1">
+              {isSortMode && (
+                <div className="flex flex-col gap-1 pr-1 bg-white/50 rounded-xl">
                   <button 
                     disabled={originalIdx === 0} 
                     onClick={() => moveProcedure(originalIdx, 'up')} 
-                    className={`p-2 rounded-xl flex-1 flex items-center justify-center transition-all ${originalIdx === 0 ? 'text-slate-100' : 'text-teal-600 bg-white shadow-sm active:scale-90 active:bg-teal-50'}`}
+                    className={`p-2 rounded-xl flex-1 flex items-center justify-center transition-all ${originalIdx === 0 ? 'text-slate-100' : 'text-teal-600 bg-white shadow-sm hover:bg-teal-50 active:scale-90'}`}
                   >
                     <ChevronUp size={20} />
                   </button>
                   <button 
                     disabled={originalIdx === procedures.length - 1} 
                     onClick={() => moveProcedure(originalIdx, 'down')} 
-                    className={`p-2 rounded-xl flex-1 flex items-center justify-center transition-all ${originalIdx === procedures.length - 1 ? 'text-slate-100' : 'text-teal-600 bg-white shadow-sm active:scale-90 active:bg-teal-50'}`}
+                    className={`p-2 rounded-xl flex-1 flex items-center justify-center transition-all ${originalIdx === procedures.length - 1 ? 'text-slate-100' : 'text-teal-600 bg-white shadow-sm hover:bg-teal-50 active:scale-90'}`}
                   >
                     <ChevronDown size={20} />
                   </button>
                 </div>
               )}
               <button 
-                onClick={() => navigate(`/procedures/${p.id}`)} 
-                className="flex-1 bg-white p-5 rounded-[28px] border border-slate-100 shadow-sm flex items-center justify-between group active:scale-[0.98] transition-all"
+                onClick={() => !isSortMode && navigate(`/procedures/${p.id}`)} 
+                className={`flex-1 bg-white p-5 rounded-[28px] border border-slate-100 shadow-sm flex items-center justify-between group transition-all ${isSortMode ? 'opacity-90' : 'active:scale-[0.98]'}`}
               >
                 <div className="flex items-center gap-4 text-left">
-                  <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600">
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isSortMode ? 'bg-teal-50 text-teal-600' : 'bg-blue-50 text-blue-600'}`}>
                     <BookOpen size={20} />
                   </div>
                   <div className="max-w-[180px]">
@@ -549,16 +575,14 @@ const ProceduresPage: React.FC<any> = ({ procedures, user, onSaveMaster }) => {
                     <p className="font-black text-slate-800 text-sm leading-tight truncate">{p.title}</p>
                   </div>
                 </div>
-                <div className="p-2 bg-slate-50 rounded-xl text-slate-300 group-hover:text-teal-600 transition-colors">
-                  <ChevronRight size={18} />
-                </div>
+                {!isSortMode && <div className="p-2 bg-slate-50 rounded-xl text-slate-300 group-hover:text-teal-600 transition-colors"><ChevronRight size={18} /></div>}
               </button>
             </div>
           );
         })}
       </div>
       
-      {isMentor && (
+      {!isSortMode && isMentor && (
         <button 
           onClick={() => navigate('/procedures/new')} 
           className="fixed bottom-24 right-6 w-14 h-14 bg-teal-600 text-white rounded-full shadow-2xl flex items-center justify-center active:scale-95 transition-all z-40 border-4 border-white"
@@ -570,15 +594,14 @@ const ProceduresPage: React.FC<any> = ({ procedures, user, onSaveMaster }) => {
   );
 };
 
-// --- Procedure Edit with Unique ID tracking for Steps ---
+// --- Procedure Edit with Improved Sorting UI ---
 const ProcedureEditPage: React.FC<any> = ({ procedures, onSave }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const isNew = !id;
   const existing = procedures.find((p: Procedure) => p.id === id);
 
-  // ステップ管理用のユニークID付きステート
-  // 配列のindexで管理すると並び替え時にバグが起きやすいため、編集用の一時的なIDを振る
+  // 編集画面内でのステップ管理（ID付与で並べ替えバグを防止）
   const [form, setForm] = useState<{
     title: string;
     category: string;
@@ -634,7 +657,6 @@ const ProcedureEditPage: React.FC<any> = ({ procedures, onSave }) => {
 
   const handleSubmit = () => { 
     if(!form.title) return alert('タイトルを入力してください'); 
-    // 保存時にステップを文字列の配列に戻す
     const dataToSave = {
       ...form,
       id: form.id || `p_${Date.now()}`,
@@ -662,39 +684,47 @@ const ProcedureEditPage: React.FC<any> = ({ procedures, onSave }) => {
 
         <div className="space-y-4">
           <label className="text-[10px] font-black text-slate-400 uppercase px-1 flex items-center gap-2">
-            <GripVertical size={12} /> ステップの構成
+            <ArrowDownUp size={12} /> ステップ解説（並べ替え対応）
           </label>
-          <div className="space-y-3">
+          <div className="space-y-4">
             {form.steps.map((step, i) => (
-              <div key={step.id} className="flex gap-2 items-stretch animate-in slide-in-from-left-2 transition-all">
-                <div className="flex flex-col gap-1">
+              <div key={step.id} className="flex gap-2 items-stretch animate-in slide-in-from-left-2 transition-all duration-300">
+                {/* 並べ替えコントロール */}
+                <div className="flex flex-col w-12 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden shrink-0">
                   <button 
                     disabled={i === 0} 
                     onClick={() => moveStep(i, 'up')} 
-                    className={`p-2 rounded-xl flex-1 flex items-center justify-center transition-all ${i === 0 ? 'text-slate-50' : 'text-teal-600 bg-white shadow-sm hover:bg-teal-50 active:scale-90'}`}
+                    className={`flex-1 flex items-center justify-center transition-all ${i === 0 ? 'bg-slate-50 text-slate-200' : 'text-teal-600 hover:bg-teal-50 active:bg-teal-100'}`}
                   >
-                    <ChevronUp size={18} />
+                    <ChevronUp size={20} />
                   </button>
+                  <div className="h-px bg-slate-50" />
+                  <div className="bg-slate-50 flex items-center justify-center py-1 font-black text-[10px] text-slate-400">
+                    {i + 1}
+                  </div>
+                  <div className="h-px bg-slate-50" />
                   <button 
                     disabled={i === form.steps.length - 1} 
                     onClick={() => moveStep(i, 'down')} 
-                    className={`p-2 rounded-xl flex-1 flex items-center justify-center transition-all ${i === form.steps.length - 1 ? 'text-slate-50' : 'text-teal-600 bg-white shadow-sm hover:bg-teal-50 active:scale-90'}`}
+                    className={`flex-1 flex items-center justify-center transition-all ${i === form.steps.length - 1 ? 'bg-slate-50 text-slate-200' : 'text-teal-600 hover:bg-teal-50 active:bg-teal-100'}`}
                   >
-                    <ChevronDown size={18} />
+                    <ChevronDown size={20} />
                   </button>
                 </div>
+
+                {/* 内容入力エリア */}
                 <div className="flex-1 bg-white border border-slate-100 rounded-[28px] shadow-sm flex flex-col overflow-hidden">
                   <div className="bg-slate-50 px-4 py-1.5 flex justify-between items-center">
-                    <span className="text-[9px] font-black text-slate-400">STEP {i + 1}</span>
-                    <button onClick={() => removeStep(i)} className="text-slate-300 hover:text-red-500 transition-colors p-1">
+                    <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Description</span>
+                    <button onClick={() => removeStep(i)} className="text-slate-200 hover:text-red-500 transition-colors p-1">
                       <Trash2 size={14}/>
                     </button>
                   </div>
                   <textarea 
                     value={step.text} 
-                    onChange={e => updateStepText(i, e.target.value)} 
+                    onChange={(e) => updateStepText(i, e.target.value)} 
                     placeholder={`ステップ${i + 1}の内容を入力...`} 
-                    className="w-full p-4 bg-transparent border-none outline-none font-bold text-sm min-h-[80px] resize-none" 
+                    className="w-full p-4 bg-transparent border-none outline-none font-bold text-sm min-h-[90px] resize-none leading-relaxed" 
                   />
                 </div>
               </div>
@@ -704,7 +734,7 @@ const ProcedureEditPage: React.FC<any> = ({ procedures, onSave }) => {
             onClick={() => setForm({...form, steps: [...form.steps, { id: Math.random().toString(36).substr(2, 9), text: '' }]})} 
             className="w-full py-4 border-2 border-dashed border-slate-100 rounded-[28px] text-[10px] font-black text-teal-600 uppercase tracking-widest hover:bg-white hover:border-teal-200 transition-all flex items-center justify-center gap-2"
           >
-            <Plus size={16} /> ステップを追加
+            <Plus size={16} /> 新しいステップを追加
           </button>
         </div>
 
@@ -809,7 +839,7 @@ const SkillMapPage: React.FC<any> = ({ user, skills, allProgress, allUsers, onUp
 const ProfilePage: React.FC<{ user: User; allUsers: User[]; onDeleteUser: (id: string) => void; onLogout: () => void }> = ({ user, allUsers, onDeleteUser, onLogout }) => (
   <div className="p-8 space-y-8 pb-32 animate-in fade-in">
     <div className="text-center space-y-4"><div className="w-24 h-24 bg-teal-50 text-teal-600 rounded-[32px] mx-auto flex items-center justify-center shadow-inner border-2 border-white"><UserIcon size={40} /></div><div><h2 className="text-2xl font-black text-slate-800">{user.name}</h2><p className="text-xs font-black text-slate-300 uppercase tracking-widest mt-1">{user.role}</p></div></div>
-    <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm text-left space-y-4"><div className="flex justify-between items-center pb-4 border-b border-slate-50"><span className="text-[10px] font-black text-slate-400 uppercase">Clinic</span><span className="text-sm font-black text-slate-800">{DEFAULT_CLINIC_NAME}</span></div><div className="flex justify-between items-center"><span className="text-[10px] font-black text-slate-400 uppercase">Version</span><span className="text-xs font-black text-teal-600">v2.4.0 FixedSorting</span></div></div>
+    <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm text-left space-y-4"><div className="flex justify-between items-center pb-4 border-b border-slate-50"><span className="text-[10px] font-black text-slate-400 uppercase">Clinic</span><span className="text-sm font-black text-slate-800">{DEFAULT_CLINIC_NAME}</span></div><div className="flex justify-between items-center"><span className="text-[10px] font-black text-slate-400 uppercase">Version</span><span className="text-xs font-black text-teal-600">v2.5.0 SmoothSort</span></div></div>
     <button onClick={onLogout} className="w-full py-5 bg-red-50 text-red-500 rounded-[28px] font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-all">ログアウト</button>
   </div>
 );
