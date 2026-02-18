@@ -1,6 +1,6 @@
 
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
+import { getFirestore, Firestore } from "firebase/firestore";
 
 // Firebase設定
 const firebaseConfig = {
@@ -12,9 +12,13 @@ const firebaseConfig = {
   appId: "1:260565277144:web:f3e12e46ae8bf589717aad"
 };
 
-// 既に初期化されている場合はそれを使用し、そうでなければ新規に初期化
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+// シングルトンパターンの初期化
+let app: FirebaseApp;
+if (getApps().length === 0) {
+  app = initializeApp(firebaseConfig);
+} else {
+  app = getApp();
+}
 
-// Firestoreインスタンスをエクスポート
-// この時点で importmap により firebase/firestore が読み込まれているため、サービスが利用可能になります。
-export const db = getFirestore(app);
+// Firestoreインスタンスを取得
+export const db: Firestore = getFirestore(app);
