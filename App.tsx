@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { HashRouter as Router, Routes, Route, Link, useNavigate, useLocation, useParams, Navigate } from 'react-router-dom';
 import { 
   ClipboardList, 
@@ -26,10 +26,8 @@ import {
   Info,
   ExternalLink,
   AlertCircle,
-  Lock,
   Plus,
   Trash2,
-  MoreVertical,
   X,
   Settings,
   Lightbulb,
@@ -51,7 +49,7 @@ import {
 
 // Firebase integration
 import { db } from './firebase';
-import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 
 // --- Types & Config ---
 import { UserRole, SkillLevel, SkillLevelLabels, UserSkillProgress, Procedure, Skill, User, QA, Attachment } from './types';
@@ -168,6 +166,7 @@ const DashboardPage: React.FC<any> = ({ user, allProgress, skills, allUsers, cli
   const [tempMemo, setTempMemo] = useState(memoData[today] || '');
   
   useEffect(() => {
+    // 外部からの更新（Firestore同期）を反映
     setTempMemo(memoData[today] || '');
   }, [memoData, today]);
   
@@ -237,16 +236,16 @@ const DashboardPage: React.FC<any> = ({ user, allProgress, skills, allUsers, cli
       <section className="space-y-4">
         <div className="flex items-center justify-between px-2">
           <h3 className="text-[11px] font-black text-slate-400 flex items-center gap-2 uppercase tracking-widest">
-            <StickyNote size={14} className="text-teal-600" /> 本日の学びログ
+            <StickyNote size={14} className="text-teal-600" /> ラーニング・ログ（{formatDisplayDate(today)}）
           </h3>
           <button 
             onClick={() => navigate('/memo-history')} 
             className="flex items-center gap-1 text-[10px] font-black text-teal-600 hover:opacity-70"
           >
-            <History size={12} /> 過去の記録を見る
+            <History size={12} /> 過去の記録
           </button>
         </div>
-        <div className="bg-amber-50 rounded-[32px] p-6 border border-amber-100 shadow-sm space-y-4">
+        <div className="bg-amber-50 rounded-[32px] p-6 border border-amber-100 shadow-sm space-y-4 relative">
           <textarea 
             value={tempMemo} 
             onChange={(e) => setTempMemo(e.target.value)} 
@@ -267,6 +266,7 @@ const DashboardPage: React.FC<any> = ({ user, allProgress, skills, allUsers, cli
 
 const MemoHistoryPage: React.FC<any> = ({ memoData }) => {
   const navigate = useNavigate();
+  // 日付キーを降順（新しい順）にソート
   const sortedDates = Object.keys(memoData).sort().reverse();
 
   return (
@@ -304,6 +304,8 @@ const MemoHistoryPage: React.FC<any> = ({ memoData }) => {
     </div>
   );
 };
+
+// ... (Other pages like ProceduresPage, ProcedureDetailPage etc. remain the same as previously defined)
 
 const ProceduresPage: React.FC<any> = ({ procedures, user }) => {
   const navigate = useNavigate();
@@ -598,8 +600,6 @@ const ProcedureEditPage: React.FC<any> = ({ procedures, onSave }) => {
   );
 };
 
-// --- Q&A Page ---
-
 const QAPage: React.FC<any> = ({ qaList, user, onSave, onDelete }) => {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
@@ -685,8 +685,6 @@ const QAPage: React.FC<any> = ({ qaList, user, onSave, onDelete }) => {
     </div>
   );
 };
-
-// --- Skill Map Page ---
 
 const SkillMapPage: React.FC<any> = ({ user, skills, allProgress, allUsers, onUpdate, onSaveSkill, onDeleteSkill, onSaveMaster }) => {
   const { userId } = useParams();
@@ -993,11 +991,9 @@ const AppContent: React.FC = () => {
     const unsubClinic = onSnapshot(doc(db, 'clinic_data', clinicId), snap => {
       if (snap.exists()) {
         const data = snap.data();
-        // データの部分的な欠落を防ぐため、存在する場合のみ更新する
         if (data.users) setAllUsers(data.users);
         if (data.allProgress) setAllSkillProgress(data.allProgress);
         
-        // マスターデータが存在しない場合は、初期状態で上書きされないようにガード
         if (data.procedures && data.procedures.length > 0) {
           setProcedures(data.procedures);
         } else if (procedures.length === 0) {
@@ -1016,7 +1012,6 @@ const AppContent: React.FC = () => {
           setQaList(MOCK_QA);
         }
       } else {
-        // ドキュメントが存在しない初回のみ初期値を書き込む
         setDoc(doc(db, 'clinic_data', clinicId), { 
           users: INITIAL_USERS,
           procedures: MOCK_PROCEDURES, 
@@ -1039,6 +1034,7 @@ const AppContent: React.FC = () => {
     const unsubMemo = onSnapshot(doc(db, 'memos', user.id), snap => {
       if (snap.exists()) {
         const data = snap.data();
+        // data.entries: { "YYYY-MM-DD": "content", ... }
         setMemoData(data.entries || {});
       }
     });
@@ -1081,13 +1077,10 @@ const AppContent: React.FC = () => {
   const handleSaveMaster = async (key: string, list: any[]) => {
     setIsSaving(true);
     try {
-      const cleanList = JSON.parse(JSON.stringify(list));
       const clinicId = user?.clinicId || 'c1';
-      await setDoc(doc(db, 'clinic_data', clinicId), { [key]: cleanList }, { merge: true });
-      console.log(`Saved ${key} to clinic ${clinicId}`);
+      await setDoc(doc(db, 'clinic_data', clinicId), { [key]: list }, { merge: true });
     } catch (err) {
-      console.error("Save error:", err);
-      alert(`保存エラーが発生しました: ${key}を保存できませんでした。`);
+      alert(`保存エラーが発生しました。`);
     } finally { 
       setIsSaving(false); 
     }
@@ -1099,7 +1092,8 @@ const AppContent: React.FC = () => {
     try {
       const newMemoData = { ...memoData, [date]: content };
       setMemoData(newMemoData);
-      await setDoc(doc(db, 'memos', user.id), { entries: newMemoData });
+      // memos/{userId} ドキュメントの entries フィールドを更新
+      await setDoc(doc(db, 'memos', user.id), { entries: newMemoData }, { merge: true });
     } catch (err) {
       alert("メモの保存に失敗しました。");
     } finally {
