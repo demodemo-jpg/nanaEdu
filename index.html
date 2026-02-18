@@ -19,18 +19,22 @@
           50% { opacity: 0.5; }
         }
         .animate-subtle-pulse { animation: subtle-pulse 2s infinite ease-in-out; }
+
+        /* Step Sorting Animation */
+        .step-transition { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
     </style>
 <script type="importmap">
 {
   "imports": {
     "react": "https://esm.sh/react@19.0.0",
+    "react/": "https://esm.sh/react@19.0.0/",
     "react-dom": "https://esm.sh/react-dom@19.0.0",
     "react-dom/": "https://esm.sh/react-dom@19.0.0/",
-    "react/": "https://esm.sh/react@19.0.0/",
-    "lucide-react": "https://esm.sh/lucide-react@0.475.0",
-    "react-router-dom": "https://esm.sh/react-router-dom@7.2.0",
+    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
+    "lucide-react": "https://esm.sh/lucide-react@0.475.0?deps=react@19.0.0",
+    "react-router-dom": "https://esm.sh/react-router-dom@6.28.2?deps=react@19.0.0,react-dom@19.0.0",
     "firebase/app": "https://esm.sh/firebase@11.3.1/app",
-    "firebase/firestore": "https://esm.sh/firebase@11.3.1/firestore",
+    "firebase/firestore": "https://esm.sh/firebase@11.3.1/firestore?deps=firebase@11.3.1/app",
     "firebase/": "https://esm.sh/firebase@^12.9.0/"
   }
 }
