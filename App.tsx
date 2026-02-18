@@ -277,7 +277,6 @@ const ProceduresPage: React.FC<any> = ({ procedures, onSaveMaster }) => {
     const target = direction === 'up' ? index - 1 : index + 1;
     if (target < 0 || target >= procedures.length) return;
     
-    // スワップ
     const temp = newList[index];
     newList[index] = newList[target];
     newList[target] = temp;
@@ -314,7 +313,6 @@ const ProceduresPage: React.FC<any> = ({ procedures, onSaveMaster }) => {
 
       <div className="space-y-3">
         {filtered.map((p: Procedure, idx: number) => {
-          // 元の配列におけるインデックスを取得（並び替え用）
           const originalIdx = procedures.findIndex(item => item.id === p.id);
           return (
             <div key={p.id} className="flex gap-2 items-center">
@@ -514,6 +512,15 @@ const ProcedureEditPage: React.FC<any> = ({ procedures, onSave }) => {
     setForm({ ...form, attachments: (form.attachments || []).filter(a => a.id !== attId) });
   };
 
+  const moveStep = (index: number, direction: 'up' | 'down') => {
+    const newSteps = [...(form.steps || [])];
+    const target = direction === 'up' ? index - 1 : index + 1;
+    if (target < 0 || target >= newSteps.length) return;
+    
+    [newSteps[index], newSteps[target]] = [newSteps[target], newSteps[index]];
+    setForm({ ...form, steps: newSteps });
+  };
+
   const handleSubmit = () => {
     if(!form.title) return alert('タイトルを入力してください');
     onSave({...form, id: form.id || `p_${Date.now()}`});
@@ -539,19 +546,43 @@ const ProcedureEditPage: React.FC<any> = ({ procedures, onSave }) => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase px-1">ステップ解説</label>
-            {form.steps?.map((step, i) => (
-              <div key={i} className="flex gap-2 group">
-                <textarea value={step} onChange={e => { const s = [...form.steps!]; s[i] = e.target.value; setForm({...form, steps: s}); }} placeholder={`ステップ ${i+1}`} className="w-full p-4 bg-white border border-slate-100 rounded-2xl font-bold text-sm min-h-[60px] resize-none shadow-sm focus:border-teal-500 transition-all" />
-                <button onClick={() => setForm({...form, steps: form.steps!.filter((_, idx) => idx !== i)})} className="p-2 text-slate-200 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
-              </div>
-            ))}
-            <button onClick={() => setForm({...form, steps: [...form.steps!, '']})} className="w-full py-3 border-2 border-dashed border-slate-100 rounded-2xl text-[10px] font-black text-teal-600 uppercase tracking-widest hover:bg-white transition-all">+ ステップを追加</button>
+            <label className="text-[10px] font-black text-slate-400 uppercase px-1">ステップ解説（順番入れ替え可能）</label>
+            <div className="space-y-3">
+              {form.steps?.map((step, i) => (
+                <div key={i} className="flex gap-2 group items-start">
+                  <div className="flex flex-col gap-1 pt-1">
+                    <button 
+                      disabled={i === 0}
+                      onClick={() => moveStep(i, 'up')} 
+                      className={`p-1 rounded ${i === 0 ? 'text-slate-100' : 'text-teal-600 bg-teal-50 hover:bg-teal-100'}`}
+                    >
+                      <ArrowUp size={14} />
+                    </button>
+                    <button 
+                      disabled={i === (form.steps?.length || 0) - 1}
+                      onClick={() => moveStep(i, 'down')} 
+                      className={`p-1 rounded ${i === (form.steps?.length || 0) - 1 ? 'text-slate-100' : 'text-teal-600 bg-teal-50 hover:bg-teal-100'}`}
+                    >
+                      <ArrowDown size={14} />
+                    </button>
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <textarea 
+                      value={step} 
+                      onChange={e => { const s = [...form.steps!]; s[i] = e.target.value; setForm({...form, steps: s}); }} 
+                      placeholder={`ステップ ${i+1} の説明を入力...`} 
+                      className="w-full p-4 bg-white border border-slate-100 rounded-2xl font-bold text-sm min-h-[80px] resize-none shadow-sm focus:border-teal-500 transition-all" 
+                    />
+                  </div>
+                  <button onClick={() => setForm({...form, steps: form.steps!.filter((_, idx) => idx !== i)})} className="p-2 text-slate-200 hover:text-red-500 transition-colors self-center"><Trash2 size={18}/></button>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setForm({...form, steps: [...form.steps!, '']})} className="w-full py-4 border-2 border-dashed border-slate-100 rounded-2xl text-[10px] font-black text-teal-600 uppercase tracking-widest hover:bg-white transition-all">+ 新しいステップを追加</button>
           </div>
 
           <div className="space-y-3">
             <label className="text-[10px] font-black text-slate-400 uppercase px-1">関連資料 (写真・PDF・YouTube)</label>
-            
             <div className="space-y-3">
               {(form.attachments || []).map((att) => (
                 <div key={att.id} className="p-5 bg-white rounded-[28px] border border-slate-100 shadow-sm space-y-4">
@@ -565,7 +596,6 @@ const ProcedureEditPage: React.FC<any> = ({ procedures, onSave }) => {
                     </div>
                     <button onClick={() => removeAttachment(att.id)} className="text-slate-200 hover:text-red-500"><Trash2 size={14}/></button>
                   </div>
-
                   <div className="space-y-3">
                     <input value={att.name} onChange={e => updateAttachment(att.id, { name: e.target.value })} placeholder="表示名" className="w-full p-3 bg-slate-50 rounded-xl text-xs font-bold outline-none" />
                     <div className="flex gap-2">
@@ -988,14 +1018,12 @@ const AppContent: React.FC = () => {
     const clinicId = user?.clinicId || 'c1';
     setIsSyncing(true);
     
-    // Firestore同期
     const unsubClinic = onSnapshot(doc(db, 'clinic_data', clinicId), snap => {
       if (snap.exists()) {
         const data = snap.data();
         if (data.users) setAllUsers(data.users);
         if (data.allProgress) setAllSkillProgress(data.allProgress);
         
-        // マスターデータの同期（初期値ガード付き）
         if (data.procedures) {
           setProcedures(data.procedures);
         } else if (procedures.length === 0) {
@@ -1014,7 +1042,6 @@ const AppContent: React.FC = () => {
           setQaList(MOCK_QA);
         }
       } else {
-        // 初回書き込み
         setDoc(doc(db, 'clinic_data', clinicId), { 
           users: INITIAL_USERS,
           procedures: MOCK_PROCEDURES, 
@@ -1056,7 +1083,7 @@ const AppContent: React.FC = () => {
     try {
       await setDoc(doc(db, 'clinic_data', user?.clinicId || 'c1'), { users: nextUsers }, { merge: true });
     } catch (err) {
-      alert("保存に失敗しました。ネットワークを確認してください。");
+      alert("保存に失敗しました。");
     }
   };
 
