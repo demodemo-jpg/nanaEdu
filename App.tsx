@@ -41,7 +41,7 @@ import {
   ArrowUp,
   ArrowDown,
   FileText,
-  Image as ImageIcon,
+  ImageIcon,
   PlayCircle,
   FileDown,
   UploadCloud,
@@ -51,7 +51,7 @@ import {
 
 // Firebase integration
 import { db } from './firebase';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 
 // --- Types & Config ---
 import { UserRole, SkillLevel, SkillLevelLabels, UserSkillProgress, Procedure, Skill, User, QA, Attachment } from './types';
@@ -475,7 +475,7 @@ const ProcedureEditPage: React.FC<any> = ({ procedures, onSave }) => {
     if (!file || !activeAttIdForUpload) return;
 
     if (file.size > 1024 * 1024) {
-      alert("ファイルが大きすぎます (最大1MB)。");
+      alert("ファイルが大きすぎます (最大1MB)。画像サイズを小さくしてください。");
       return;
     }
 
@@ -512,7 +512,7 @@ const ProcedureEditPage: React.FC<any> = ({ procedures, onSave }) => {
   };
 
   const handleSubmit = () => {
-    if(!form.title) return alert('タイトル必須');
+    if(!form.title) return alert('タイトルを入力してください');
     onSave({...form, id: form.id || `p_${Date.now()}`});
     navigate('/procedures');
   };
@@ -531,23 +531,23 @@ const ProcedureEditPage: React.FC<any> = ({ procedures, onSave }) => {
         <div className="space-y-4">
           <div className="space-y-1">
             <label className="text-[10px] font-black text-slate-400 uppercase px-1">基本情報</label>
-            <input value={form.title} onChange={e => setForm({...form, title: e.target.value})} placeholder="手順タイトル" className="w-full p-4 bg-white border border-slate-100 rounded-2xl font-bold outline-none" />
-            <input value={form.category} onChange={e => setForm({...form, category: e.target.value})} placeholder="カテゴリ" className="w-full p-4 bg-white border border-slate-100 rounded-2xl font-bold outline-none" />
+            <input value={form.title} onChange={e => setForm({...form, title: e.target.value})} placeholder="手順タイトル" className="w-full p-4 bg-white border border-slate-100 rounded-2xl font-bold outline-none shadow-sm focus:border-teal-500 transition-all" />
+            <input value={form.category} onChange={e => setForm({...form, category: e.target.value})} placeholder="カテゴリ" className="w-full p-4 bg-white border border-slate-100 rounded-2xl font-bold outline-none shadow-sm focus:border-teal-500 transition-all" />
           </div>
 
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-400 uppercase px-1">ステップ</label>
             {form.steps?.map((step, i) => (
-              <div key={i} className="flex gap-2">
-                <textarea value={step} onChange={e => { const s = [...form.steps!]; s[i] = e.target.value; setForm({...form, steps: s}); }} placeholder={`ステップ ${i+1}`} className="w-full p-4 bg-white border border-slate-100 rounded-2xl font-bold text-sm min-h-[60px] resize-none" />
-                <button onClick={() => setForm({...form, steps: form.steps!.filter((_, idx) => idx !== i)})} className="p-2 text-slate-200 hover:text-red-500"><Trash2 size={16}/></button>
+              <div key={i} className="flex gap-2 group">
+                <textarea value={step} onChange={e => { const s = [...form.steps!]; s[i] = e.target.value; setForm({...form, steps: s}); }} placeholder={`ステップ ${i+1}`} className="w-full p-4 bg-white border border-slate-100 rounded-2xl font-bold text-sm min-h-[60px] resize-none shadow-sm focus:border-teal-500 transition-all" />
+                <button onClick={() => setForm({...form, steps: form.steps!.filter((_, idx) => idx !== i)})} className="p-2 text-slate-200 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
               </div>
             ))}
-            <button onClick={() => setForm({...form, steps: [...form.steps!, '']})} className="w-full py-3 border-2 border-dashed border-slate-100 rounded-2xl text-[10px] font-black text-teal-600 uppercase tracking-widest hover:bg-white">+ ステップを追加</button>
+            <button onClick={() => setForm({...form, steps: [...form.steps!, '']})} className="w-full py-3 border-2 border-dashed border-slate-100 rounded-2xl text-[10px] font-black text-teal-600 uppercase tracking-widest hover:bg-white transition-all">+ ステップを追加</button>
           </div>
 
           <div className="space-y-3">
-            <label className="text-[10px] font-black text-slate-400 uppercase px-1">関連資料 (写真・PDF・動画)</label>
+            <label className="text-[10px] font-black text-slate-400 uppercase px-1">関連資料 (写真・PDF・YouTube)</label>
             
             <div className="space-y-3">
               {(form.attachments || []).map((att) => (
@@ -568,7 +568,7 @@ const ProcedureEditPage: React.FC<any> = ({ procedures, onSave }) => {
                     <div className="flex gap-2">
                       <input value={att.url} onChange={e => updateAttachment(att.id, { url: e.target.value })} placeholder="URLを入力" className="flex-1 p-3 bg-slate-50 rounded-xl text-[10px] font-bold outline-none font-mono truncate" />
                       {att.type !== 'video' && (
-                        <button onClick={() => triggerFileUpload(att.id)} disabled={isReadingFile === att.id} className="px-4 bg-teal-50 text-teal-600 rounded-xl">
+                        <button onClick={() => triggerFileUpload(att.id)} disabled={isReadingFile === att.id} className="px-4 bg-teal-50 text-teal-600 rounded-xl active:scale-95 transition-all">
                           {isReadingFile === att.id ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={18} />}
                         </button>
                       )}
@@ -841,7 +841,7 @@ const ProfilePage: React.FC<{ user: User; allUsers: User[]; onDeleteUser: (id: s
        </div>
        <div className="flex justify-between items-center">
           <span className="text-[10px] font-black text-slate-400 uppercase">Version</span>
-          <span className="text-xs font-black text-teal-600">v2.1.0 Cloud Stabilized</span>
+          <span className="text-xs font-black text-teal-600">v2.1.2 Cloud Stabilized</span>
        </div>
     </div>
 
@@ -989,15 +989,34 @@ const AppContent: React.FC = () => {
     const clinicId = user?.clinicId || 'c1';
     setIsSyncing(true);
     
+    // Firestore同期
     const unsubClinic = onSnapshot(doc(db, 'clinic_data', clinicId), snap => {
       if (snap.exists()) {
         const data = snap.data();
-        setAllUsers(data.users || INITIAL_USERS);
-        setAllSkillProgress(data.allProgress || {});
-        setProcedures(data.procedures || MOCK_PROCEDURES);
-        setSkills(data.skills || MOCK_SKILLS);
-        setQaList(data.qa || MOCK_QA);
+        // データの部分的な欠落を防ぐため、存在する場合のみ更新する
+        if (data.users) setAllUsers(data.users);
+        if (data.allProgress) setAllSkillProgress(data.allProgress);
+        
+        // マスターデータが存在しない場合は、初期状態で上書きされないようにガード
+        if (data.procedures && data.procedures.length > 0) {
+          setProcedures(data.procedures);
+        } else if (procedures.length === 0) {
+          setProcedures(MOCK_PROCEDURES);
+        }
+        
+        if (data.skills && data.skills.length > 0) {
+          setSkills(data.skills);
+        } else if (skills.length === 0) {
+          setSkills(MOCK_SKILLS);
+        }
+        
+        if (data.qa && data.qa.length > 0) {
+          setQaList(data.qa);
+        } else if (qaList.length === 0) {
+          setQaList(MOCK_QA);
+        }
       } else {
+        // ドキュメントが存在しない初回のみ初期値を書き込む
         setDoc(doc(db, 'clinic_data', clinicId), { 
           users: INITIAL_USERS,
           procedures: MOCK_PROCEDURES, 
@@ -1036,7 +1055,11 @@ const AppContent: React.FC = () => {
     };
     const nextUsers = [...allUsers, newUser];
     setAllUsers(nextUsers);
-    await setDoc(doc(db, 'clinic_data', user?.clinicId || 'c1'), { users: nextUsers }, { merge: true });
+    try {
+      await setDoc(doc(db, 'clinic_data', user?.clinicId || 'c1'), { users: nextUsers }, { merge: true });
+    } catch (err) {
+      alert("保存に失敗しました。ネットワークを確認してください。");
+    }
   };
 
   const handleDeleteUser = async (targetId: string) => {
@@ -1058,21 +1081,30 @@ const AppContent: React.FC = () => {
   const handleSaveMaster = async (key: string, list: any[]) => {
     setIsSaving(true);
     try {
-      // プレーンな配列として保存することを保証
       const cleanList = JSON.parse(JSON.stringify(list));
-      await setDoc(doc(db, 'clinic_data', user?.clinicId || 'c1'), { [key]: cleanList }, { merge: true });
+      const clinicId = user?.clinicId || 'c1';
+      await setDoc(doc(db, 'clinic_data', clinicId), { [key]: cleanList }, { merge: true });
+      console.log(`Saved ${key} to clinic ${clinicId}`);
     } catch (err) {
       console.error("Save error:", err);
-    } finally { setIsSaving(false); }
+      alert(`保存エラーが発生しました: ${key}を保存できませんでした。`);
+    } finally { 
+      setIsSaving(false); 
+    }
   };
 
   const handleSaveMemo = async (date: string, content: string) => {
     if (!user) return;
     setIsSaving(true);
-    const newMemoData = { ...memoData, [date]: content };
-    setMemoData(newMemoData);
-    await setDoc(doc(db, 'memos', user.id), { entries: newMemoData });
-    setIsSaving(false);
+    try {
+      const newMemoData = { ...memoData, [date]: content };
+      setMemoData(newMemoData);
+      await setDoc(doc(db, 'memos', user.id), { entries: newMemoData });
+    } catch (err) {
+      alert("メモの保存に失敗しました。");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleLogin = (u: User) => { 
