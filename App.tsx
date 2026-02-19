@@ -379,15 +379,15 @@ const ProcedureDetailPage: React.FC<any> = ({ procedures, onDelete }) => {
             {procedure.attachments.map((at: Attachment) => (
               <a key={at.id} href={at.url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 min-w-[180px] bg-white border border-slate-100 rounded-[28px] shadow-sm overflow-hidden flex flex-col group active:scale-95 transition-all">
                 {at.type === 'image' ? (
-                  <div className="w-full h-28 bg-slate-100 overflow-hidden">
-                    <img src={at.url} alt={at.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  <div className="w-full h-32 bg-slate-900 overflow-hidden flex items-center justify-center">
+                    <img src={at.url} alt={at.name} className="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform duration-500" />
                   </div>
                 ) : (
-                  <div className={`w-full h-28 flex items-center justify-center ${at.type === 'video' ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-600'}`}>
+                  <div className={`w-full h-32 flex items-center justify-center ${at.type === 'video' ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-600'}`}>
                     <AttachmentIcon type={at.type} />
                   </div>
                 )}
-                <div className="p-3 flex justify-between items-center bg-white">
+                <div className="p-3 flex justify-between items-center bg-white border-t border-slate-50">
                   <span className="text-[11px] font-black text-slate-700 truncate pr-2">{at.name}</span>
                   <ExternalLink size={12} className="text-slate-300 group-hover:text-teal-600 flex-shrink-0" />
                 </div>
@@ -514,9 +514,9 @@ const ProcedureEditPage: React.FC<any> = ({ procedures, onSave }) => {
             <div key={at.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-3 relative group">
               <button onClick={() => setForm({...form, attachments: form.attachments.filter((_:any, idx:number) => idx !== i)})} className="absolute top-2 right-2 p-1 text-slate-300 hover:text-red-500"><Trash2 size={16} /></button>
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0 ${at.type === 'video' ? 'bg-blue-50 text-blue-600' : at.type === 'image' ? 'bg-purple-50 text-purple-600' : 'bg-red-50 text-red-600'}`}>
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0 bg-slate-900 border border-slate-100 ${at.type === 'video' ? 'text-blue-600' : at.type === 'image' ? 'text-purple-600' : 'text-red-600'}`}>
                   {at.type === 'image' && at.url ? (
-                    <img src={at.url} alt="thumb" className="w-full h-full object-cover" />
+                    <img src={at.url} alt="thumb" className="max-w-full max-h-full object-contain" />
                   ) : (
                     <AttachmentIcon type={at.type} />
                   )}
