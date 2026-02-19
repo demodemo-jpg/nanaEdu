@@ -12,13 +12,11 @@ const firebaseConfig = {
   appId: "1:260565277144:web:f3e12e46ae8bf589717aad"
 };
 
-// シングルトンパターンの初期化
-let app: FirebaseApp;
-if (getApps().length === 0) {
-  app = initializeApp(firebaseConfig);
-} else {
-  app = getApp();
-}
+// アプリの初期化
+const app: FirebaseApp = getApps().length === 0 
+  ? initializeApp(firebaseConfig) 
+  : getApp();
 
-// Firestoreインスタンスを取得
+// Firestoreインスタンスを生成
+// index.htmlのimportmapでdepsを固定しているため、ここでサービスが正しく認識されます
 export const db: Firestore = getFirestore(app);
