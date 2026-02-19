@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { HashRouter as Router, Routes, Route, Link, useNavigate, useLocation, useParams, Navigate } from 'react-router-dom';
 import { 
   ClipboardList, 
@@ -36,7 +36,10 @@ import {
   Link as LinkIcon,
   ExternalLink,
   Video,
-  PartyPopper
+  Upload,
+  FileUp,
+  PartyPopper,
+  Loader2
 } from 'lucide-react';
 
 // Firebase integration
@@ -133,7 +136,7 @@ const NavItem: React.FC<{ to: string; icon: React.ReactNode; label: string; acti
   </Link>
 );
 
-// --- Pages ---
+// --- Login Logic ---
 
 const LoginPage: React.FC<{ allUsers: User[], onLogin: (user: User) => void }> = ({ allUsers, onLogin }) => {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -213,6 +216,8 @@ const LoginPage: React.FC<{ allUsers: User[], onLogin: (user: User) => void }> =
     </div>
   );
 };
+
+// --- Pages ---
 
 const DashboardPage: React.FC<any> = ({ user, allProgress, skills, allUsers, clinicName, memoData, onSaveMemo, isSaving }) => {
   const navigate = useNavigate();
@@ -402,6 +407,7 @@ const ProcedureDetailPage: React.FC<any> = ({ procedures, onDelete }) => {
 const ProcedureEditPage: React.FC<any> = ({ procedures, onSave }) => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const isNew = !id;
   const existing = procedures.find((p: Procedure) => p.id === id);
   
@@ -415,6 +421,8 @@ const ProcedureEditPage: React.FC<any> = ({ procedures, onSave }) => {
     steps: [{id: '1', text: ''}], 
     attachments: [] 
   });
+
+  const [isProcessingFile, setIsProcessingFile] = useState(false);
 
   const handleSubmit = () => {
     onSave({ ...form, id: form.id || `p_${Date.now()}`, steps: form.steps.map((s:any) => s.text) });
@@ -430,8 +438,32 @@ const ProcedureEditPage: React.FC<any> = ({ procedures, onSave }) => {
   };
 
   const addAttachment = () => {
-    const newAt: Attachment = { id: `at_${Date.now()}`, type: 'video', url: '', name: '新しい資料' };
+    const newAt: Attachment = { id: `at_${Date.now()}`, type: 'video', url: '', name: '新しいリンク' };
     setForm({ ...form, attachments: [...form.attachments, newAt] });
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsProcessingFile(true);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      let type: 'image' | 'video' | 'pdf' = 'image';
+      if (file.type.includes('video')) type = 'video';
+      else if (file.type.includes('pdf')) type = 'pdf';
+
+      const newAt: Attachment = {
+        id: `file_${Date.now()}`,
+        type,
+        url: dataUrl,
+        name: file.name
+      };
+      setForm({ ...form, attachments: [...form.attachments, newAt] });
+      setIsProcessingFile(false);
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -466,44 +498,54 @@ const ProcedureEditPage: React.FC<any> = ({ procedures, onSave }) => {
             </div>
           </div>
         ))}
-        <button onClick={() => setForm({...form, steps: [...form.steps, {id: Math.random().toString(36), text: ''}]})} className="w-full py-4 border-2 border-dashed border-slate-200 rounded-2xl text-[11px] font-black text-teal-600">+ ステップ追加</button>
+        <button onClick={() => setForm({...form, steps: [...form.steps, {id: Math.random().toString(36), text: ''}]})} className="w-full py-4 border-2 border-dashed border-slate-200 rounded-2xl text-[11px] font-black text-teal-600 active:bg-teal-50 transition-all">+ ステップ追加</button>
       </div>
 
       <div className="space-y-4 pt-4">
-        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">参考資料（YouTube / 画像 / PDF）</label>
+        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">参考資料・ファイル</label>
         <div className="space-y-3">
           {form.attachments.map((at: Attachment, i: number) => (
             <div key={at.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-3 relative group">
               <button onClick={() => setForm({...form, attachments: form.attachments.filter((_:any, idx:number) => idx !== i)})} className="absolute top-2 right-2 p-1 text-slate-300 hover:text-red-500"><Trash2 size={16} /></button>
-              <div className="grid grid-cols-3 gap-2">
-                {['video', 'image', 'pdf'].map(type => (
-                  <button key={type} onClick={() => {
-                    const newAts = [...form.attachments];
-                    newAts[i].type = type as any;
-                    setForm({...form, attachments: newAts});
-                  }} className={`py-2 rounded-xl text-[9px] font-black uppercase transition-all ${at.type === type ? 'bg-teal-600 text-white shadow-md' : 'bg-slate-50 text-slate-400'}`}>{type}</button>
-                ))}
+              <div className="flex items-center gap-3">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${at.type === 'video' ? 'bg-blue-50 text-blue-600' : at.type === 'image' ? 'bg-purple-50 text-purple-600' : 'bg-red-50 text-red-600'}`}>
+                  <AttachmentIcon type={at.type} />
+                </div>
+                <input value={at.name} onChange={e => {
+                  const newAts = [...form.attachments];
+                  newAts[i].name = e.target.value;
+                  setForm({...form, attachments: newAts});
+                }} placeholder="タイトル" className="flex-1 p-1 bg-transparent border-none rounded-lg text-xs font-bold focus:ring-1 focus:ring-teal-100" />
               </div>
-              <input value={at.name} onChange={e => {
-                const newAts = [...form.attachments];
-                newAts[i].name = e.target.value;
-                setForm({...form, attachments: newAts});
-              }} placeholder="資料のタイトル" className="w-full p-2 bg-slate-50 border-none rounded-lg text-xs font-bold" />
-              <input value={at.url} onChange={e => {
+              <input value={at.url.startsWith('data:') ? '[ファイル保存済み]' : at.url} onChange={e => {
                 const newAts = [...form.attachments];
                 newAts[i].url = e.target.value;
                 setForm({...form, attachments: newAts});
-              }} placeholder="URL (YouTubeなど)" className="w-full p-2 bg-slate-50 border-none rounded-lg text-[10px] font-mono text-slate-500" />
+              }} disabled={at.url.startsWith('data:')} placeholder="URL (YouTube等)" className="w-full p-2 bg-slate-50 border-none rounded-lg text-[10px] font-mono text-slate-500" />
             </div>
           ))}
-          <button onClick={addAttachment} className="w-full py-4 border-2 border-dashed border-slate-200 rounded-2xl text-[11px] font-black text-amber-600 hover:bg-amber-50">+ 資料・リンク追加</button>
+          
+          <div className="grid grid-cols-2 gap-3">
+            <button onClick={addAttachment} className="py-4 border-2 border-dashed border-slate-200 rounded-2xl text-[11px] font-black text-teal-600 flex flex-col items-center justify-center gap-1 active:bg-teal-50">
+              <LinkIcon size={16} /> リンクを追加
+            </button>
+            <button 
+              disabled={isProcessingFile}
+              onClick={() => fileInputRef.current?.click()} 
+              className="py-4 border-2 border-dashed border-slate-200 rounded-2xl text-[11px] font-black text-amber-600 flex flex-col items-center justify-center gap-1 active:bg-amber-50"
+            >
+              {isProcessingFile ? <Loader2 size={16} className="animate-spin" /> : <FileUp size={16} />}
+              ファイルを選択
+            </button>
+          </div>
+          <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,application/pdf" onChange={handleFileChange} />
         </div>
       </div>
     </div>
   );
 };
 
-const SkillMapPage: React.FC<any> = ({ user, skills, allProgress, allUsers, onUpdate }) => {
+const SkillMapPage: React.FC<any> = ({ user, skills, allProgress, allUsers, onUpdate, onSaveMaster }) => {
   const { userId } = useParams();
   const targetId = userId || user.id;
   const targetUser = allUsers.find((u:any) => u.id === targetId) || user;
@@ -511,9 +553,23 @@ const SkillMapPage: React.FC<any> = ({ user, skills, allProgress, allUsers, onUp
   const stats = calculateProgress(skills, progressData);
   const rank = getRankInfo(stats);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [isAddingSkill, setIsAddingSkill] = useState(false);
+  const [newSkill, setNewSkill] = useState({ name: '', category: '基本スキル' });
+
+  const handleAddSkill = () => {
+    if (!newSkill.name.trim()) return;
+    const skill: Skill = {
+      id: `s_${Date.now()}`,
+      name: newSkill.name,
+      category: newSkill.category
+    };
+    onSaveMaster('skills', [...skills, skill]);
+    setNewSkill({ name: '', category: '基本スキル' });
+    setIsAddingSkill(false);
+  };
 
   return (
-    <div className="p-4 space-y-6 pb-24 animate-in fade-in">
+    <div className="p-4 space-y-6 pb-32 animate-in fade-in">
       <div className="bg-white p-6 rounded-[32px] shadow-sm border border-slate-100 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-teal-600 font-black text-xl">{targetUser.name.charAt(0)}</div>
@@ -541,6 +597,30 @@ const SkillMapPage: React.FC<any> = ({ user, skills, allProgress, allUsers, onUp
           );
         })}
       </div>
+
+      <button onClick={() => setIsAddingSkill(true)} className="fixed bottom-24 right-6 w-14 h-14 bg-teal-600 text-white rounded-full shadow-2xl flex items-center justify-center z-40 border-4 border-white active:scale-95 transition-all"><Plus size={28} /></button>
+
+      {isAddingSkill && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] p-4 flex items-center justify-center">
+          <div className="bg-white w-full max-w-sm rounded-[40px] p-8 space-y-4 animate-in zoom-in-95">
+            <h3 className="font-black text-lg text-slate-800">スキル項目を追加</h3>
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">項目名</label>
+                <input value={newSkill.name} onChange={e => setNewSkill({...newSkill, name: e.target.value})} placeholder="例: バキューム操作" className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none font-bold text-sm shadow-inner" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">カテゴリ</label>
+                <input value={newSkill.category} onChange={e => setNewSkill({...newSkill, category: e.target.value})} placeholder="例: 基本スキル, 臨床補助" className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none font-bold text-sm shadow-inner" />
+              </div>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button onClick={() => setIsAddingSkill(false)} className="flex-1 py-4 text-slate-400 font-black text-sm">キャンセル</button>
+              <button onClick={handleAddSkill} className="flex-1 py-4 bg-teal-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-teal-600/20">保存</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -647,7 +727,7 @@ const AppContent: React.FC = () => {
   const handleSaveMaster = async (key: string, list: any[]) => {
     setIsSaving(true);
     try { await setDoc(doc(db, 'clinic_data', user?.clinicId || 'c1'), { [key]: list }, { merge: true }); } 
-    catch (err) { alert("保存に失敗しました。"); } 
+    catch (err) { alert("保存に失敗しました。ファイルが大きすぎる可能性があります。"); } 
     finally { setIsSaving(false); }
   };
 
@@ -671,8 +751,8 @@ const AppContent: React.FC = () => {
           <Route path="/procedures/new" element={<ProcedureEditPage procedures={procedures} onSave={(p: Procedure) => handleSaveMaster('procedures', [...procedures, p])} />} />
           <Route path="/procedures/edit/:id" element={<ProcedureEditPage procedures={procedures} onSave={(p: Procedure) => handleSaveMaster('procedures', procedures.map(old => old.id === p.id ? p : old))} />} />
           <Route path="/procedures/:id" element={<ProcedureDetailPage procedures={procedures} onDelete={(id: string) => handleSaveMaster('procedures', procedures.filter(p => p.id !== id))} />} />
-          <Route path="/skills" element={<SkillMapPage user={user!} skills={skills} allProgress={allSkillProgress} allUsers={allUsers} onUpdate={handleUpdateProgress} />} />
-          <Route path="/skills/:userId" element={<SkillMapPage user={user!} skills={skills} allProgress={allSkillProgress} allUsers={allUsers} onUpdate={handleUpdateProgress} />} />
+          <Route path="/skills" element={<SkillMapPage user={user!} skills={skills} allProgress={allSkillProgress} allUsers={allUsers} onUpdate={handleUpdateProgress} onSaveMaster={handleSaveMaster} />} />
+          <Route path="/skills/:userId" element={<SkillMapPage user={user!} skills={skills} allProgress={allSkillProgress} allUsers={allUsers} onUpdate={handleUpdateProgress} onSaveMaster={handleSaveMaster} />} />
           <Route path="/qa" element={<QAPage qaList={qaList} user={user!} onSave={(q: QA) => handleSaveMaster('qa', qaList.some(oq => oq.id === q.id) ? qaList.map(oq => oq.id === q.id ? q : oq) : [...qaList, q])} onDelete={(id: string) => handleSaveMaster('qa', qaList.filter(q => q.id !== id))} />} />
           <Route path="/profile" element={
             <div className="p-8 text-center animate-in zoom-in-95">
